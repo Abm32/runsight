@@ -7,3 +7,4 @@ outputs/report.json
 .env
 *.log
 .DS_Store
+promo/
