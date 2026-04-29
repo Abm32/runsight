@@ -1,0 +1,30 @@
+{
+  "name": "runsight",
+  "version": "0.1.0",
+  "description": "Autonomous agent that runs projects, explores them, captures screenshots, and records demo videos automatically",
+  "main": "index.js",
+  "bin": {
+    "runsight": "./cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js",
+    "postinstall": "npx playwright install chromium"
+  },
+  "keywords": [
+    "agent",
+    "automation",
+    "playwright",
+    "screenshot",
+    "video",
+    "explorer",
+    "devtool"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.39.0",
+    "openai": "4.77.0",
+    "playwright": "1.49.1",
+    "yargs": "17.7.2"
+  }
+}
