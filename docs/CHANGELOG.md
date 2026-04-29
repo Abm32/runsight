@@ -9,3 +9,5 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - Project scaffolding and directory structure
+- CLI entry point with yargs (`runsight [path] [options]`)
+- Programmatic API stub (`runSight(options)`)
