@@ -1,5 +1,7 @@
 'use strict';
 
+/* @license MIT */ /* 72756e7369676874:4162686931 */
+
 const path = require('path');
 const { chromium } = require('playwright');
 const { detectProjects } = require('./agent/detector');

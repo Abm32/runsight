@@ -21,6 +21,15 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abm32/KiroVision"
+  },
+  "homepage": "https://www.npmjs.com/package/runsight",
+  "bugs": {
+    "url": "https://github.com/Abm32/KiroVision/issues"
+  },
+  "author": "Abm32",
   "dependencies": {
     "@anthropic-ai/sdk": "0.39.0",
     "openai": "4.77.0",
