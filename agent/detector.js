@@ -19,8 +19,9 @@ const IGNORE_DIRS = [
 async function detectProjects(projectPath) {
   const absPath = path.resolve(projectPath);
 
-  // Read README for project context
+  // Read README and guide for project context
   const readme = readReadme(absPath);
+  const guide = readGuide(absPath);
 
   // Check root first
   const rootProject = detectSingle(absPath);
@@ -29,6 +30,7 @@ async function detectProjects(projectPath) {
   // Only scan subdirs if root has NO runnable project (true monorepo).
   if (rootProject) {
     rootProject.readme = readme;
+    rootProject.guide = guide;
     return [rootProject];
   }
 
@@ -42,6 +44,7 @@ async function detectProjects(projectPath) {
     const sub = detectSingle(subPath);
     if (sub && isLikelyService(sub)) {
       sub.readme = readme;
+      sub.guide = guide;
       projects.push(sub);
     }
   }
@@ -56,6 +59,23 @@ async function detectProjects(projectPath) {
  */
 function readReadme(dir) {
   const names = ['README.md', 'readme.md', 'Readme.md', 'README.txt', 'README'];
+  for (const name of names) {
+    const p = path.join(dir, name);
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf8');
+    }
+  }
+  return null;
+}
+
+/**
+ * Read the .runsight guide file if it exists.
+ * This file tells the agent how to navigate the project.
+ * @param {string} dir
+ * @returns {string|null}
+ */
+function readGuide(dir) {
+  const names = ['.runsight', '.runsight.md', 'RUNSIGHT.md'];
   for (const name of names) {
     const p = path.join(dir, name);
     if (fs.existsSync(p)) {
@@ -200,4 +220,4 @@ function detectStaticProject(dir) {
   };
 }
 
-module.exports = { detectProjects, readReadme };
+module.exports = { detectProjects, readReadme, readGuide };
