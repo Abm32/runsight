@@ -1,6 +1,7 @@
 'use strict';
 
 const net = require('net');
+const { execSync } = require('child_process');
 
 /** Regex patterns for common dev server port output */
 const PORT_PATTERNS = [
@@ -26,6 +27,66 @@ function parsePortFromOutput(text) {
     }
   }
   return null;
+}
+
+/**
+ * Check if a port is currently in use.
+ * @param {number} port
+ * @returns {Promise<boolean>}
+ */
+function isPortInUse(port) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ port, host: '127.0.0.1' }, () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Kill whatever process is using a port.
+ * @param {number} port
+ * @returns {boolean} true if a process was killed
+ */
+function killPortProcess(port) {
+  try {
+    const result = execSync(`lsof -t -i:${port} 2>/dev/null`).toString().trim();
+    if (result) {
+      const pids = result.split('\n').filter(Boolean);
+      for (const pid of pids) {
+        try { execSync(`kill -9 ${pid} 2>/dev/null`); } catch { /* already dead */ }
+      }
+      return true;
+    }
+  } catch { /* lsof not found or no process */ }
+
+  // Fallback: try fuser (common on Linux)
+  try {
+    execSync(`fuser -k ${port}/tcp 2>/dev/null`);
+    return true;
+  } catch { /* no process or fuser not available */ }
+
+  return false;
+}
+
+/**
+ * Ensure a port is free — kill existing process if occupied.
+ * @param {number} port
+ * @returns {Promise<void>}
+ */
+async function ensurePortFree(port) {
+  const inUse = await isPortInUse(port);
+  if (inUse) {
+    const killed = killPortProcess(port);
+    if (killed) {
+      // Wait a moment for the port to be released
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
 }
 
 /**
@@ -59,4 +120,4 @@ function waitForPort(port, { timeout = 30000, interval = 500, host = '127.0.0.1'
   });
 }
 
-module.exports = { parsePortFromOutput, waitForPort };
+module.exports = { parsePortFromOutput, waitForPort, isPortInUse, killPortProcess, ensurePortFree };
