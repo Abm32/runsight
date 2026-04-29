@@ -35,6 +35,7 @@ async function explore(page, options, logger, screenshotter) {
   tracker.markVisited(page.url());
 
   for (let step = 1; step <= maxSteps; step++) {
+    let chosen = null;
     try {
       // 1. Capture screenshot
       const ssPath = await screenshotter.capture(page, step, step === 1 ? 'initial' : 'step');
@@ -65,7 +66,7 @@ async function explore(page, options, logger, screenshotter) {
       const prioritized = prioritizeElements(fresh);
 
       // 5. Choose element — LLM tier or top priority
-      let chosen = null;
+      chosen = null;
       let choiceReason = '';
 
       if (options.llmProvider) {
