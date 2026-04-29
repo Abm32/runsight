@@ -49,23 +49,29 @@ async function explore(page, options, logger, screenshotter) {
       }
 
       // 3. Find interactable elements (heuristic tier)
-      const allElements = await findInteractableElements(page);
-      if (!allElements.length) {
-        logger.info('No interactable elements found — stopping');
-        break;
-      }
+      let allElements = await findInteractableElements(page);
 
       // Filter out already-clicked elements
       let fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+
+      // If no fresh elements, poll for dynamic content (SPAs, games, modals)
       if (!fresh.length) {
-        // Wait for dynamic content — page state may have changed
-        await page.waitForTimeout(2000);
-        const retryElements = await findInteractableElements(page);
-        fresh = retryElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+        logger.info('Waiting for new UI elements...');
+        for (let wait = 0; wait < 5; wait++) {
+          await page.waitForTimeout(2000);
+          allElements = await findInteractableElements(page);
+          fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+          if (fresh.length) break;
+        }
         if (!fresh.length) {
-          logger.info('All elements already explored — stopping');
+          logger.info('No new elements after 10s — stopping');
           break;
         }
+      }
+
+      if (!allElements.length) {
+        logger.info('No interactable elements found — stopping');
+        break;
       }
 
       // 4. Prioritize elements (priority tier)
