@@ -1,0 +1,9 @@
+node_modules/
+outputs/screenshots/*.png
+outputs/videos/*.webm
+outputs/videos/*.mp4
+outputs/logs.txt
+outputs/report.json
+.env
+*.log
+.DS_Store
