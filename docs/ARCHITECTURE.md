@@ -62,3 +62,32 @@ graph TD
 - Sends screenshot + element list to GPT-4o or Claude
 - LLM decides which element to interact with next and why
 - Falls back to priority tier on API failure
+
+## Design Decisions
+
+### Why Playwright over Puppeteer?
+- Built-in video recording (`recordVideo`) — no FFmpeg dependency for basic video
+- Better cross-browser support (Chromium, Firefox, WebKit)
+- Auto-waiting and better stability for dynamic pages
+- Active development by Microsoft
+
+### Why 3-tier exploration instead of LLM-only?
+- **Cost**: LLM calls cost money per screenshot analyzed (~$0.004/image with GPT-4o)
+- **Speed**: Heuristic + priority runs in milliseconds; LLM adds 1-3s per step
+- **Reliability**: LLM APIs can fail; heuristic/priority always work
+- **Offline**: Works without API keys in heuristic+priority mode
+
+### Why CommonJS over ESM?
+- Maximum compatibility with existing Node.js tooling
+- Simpler `require()` for agent skill integration
+- No `.mjs` extension confusion
+
+### Trade-offs
+
+| Decision | Pro | Con |
+|----------|-----|-----|
+| Playwright recordVideo | No external deps, works headless | Only captures browser viewport, not system |
+| Stdout port detection | Zero deps, works with any server | May miss non-standard output formats |
+| DOM-based element discovery | Fast, reliable, no vision needed | Misses canvas/WebGL/iframe content |
+| Priority scoring | Deterministic, predictable | May miss context-dependent important elements |
+| LLM vision | Understands visual context | Slow, costly, requires API key |
