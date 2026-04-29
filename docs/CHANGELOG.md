@@ -5,6 +5,19 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-29
+
+### Added
+- README.md-aware project detection — reads README for project context before scanning
+- Graceful sub-service failure handling — warns and continues instead of crashing
+
+### Fixed
+- No longer treats subdirectories (public/, video/, etc.) as separate services when root has a runnable server
+- Expanded ignore list for non-service directories (dist, build, out, public, static, etc.)
+
+### Changed
+- Monorepo detection only activates when root directory has no runnable project
+
 ## [1.0.0] - 2026-04-29
 
 ### Changed

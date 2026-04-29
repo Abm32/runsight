@@ -1,6 +1,6 @@
 # RunSight
 
-> 🚀 **v1.0.0** — Production Ready
+> 🚀 **v1.1.0** — Production Ready
 
 Autonomous agent that runs projects, explores them via browser, captures screenshots, and records demo videos — automatically.
 
