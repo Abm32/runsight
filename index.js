@@ -1,5 +1,17 @@
 'use strict';
 
+const path = require('path');
+const { chromium } = require('playwright');
+const { detectProjects } = require('./agent/detector');
+const { runProjects, killAll, identifyFrontend } = require('./agent/runner');
+const { explore } = require('./agent/explorer');
+const { Screenshotter } = require('./agent/screenshotter');
+const { Recorder } = require('./agent/recorder');
+const { Logger } = require('./utils/logger');
+const { validateLLMConfig } = require('./strategies/llmStrategy');
+
+const GLOBAL_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
 /**
  * RunSight — Autonomous project explorer agent.
  * @param {Object} options
@@ -12,22 +24,99 @@
  */
 async function runSight(options = {}) {
   const opts = {
-    projectPath: options.projectPath || '.',
+    projectPath: path.resolve(options.projectPath || '.'),
     headless: options.headless !== false,
     video: options.video !== false,
     maxSteps: options.maxSteps || 15,
     llmProvider: options.llmProvider || null
   };
 
-  console.log('🔍 RunSight starting with options:', JSON.stringify(opts, null, 2));
+  // Validate LLM config upfront
+  if (opts.llmProvider) validateLLMConfig(opts.llmProvider);
 
-  // TODO: Wire modules in Task 12
-  return {
-    screenshots: [],
-    video: null,
-    report: null,
-    summary: 'RunSight v0.1.0 — pipeline not yet wired'
-  };
+  const outputDir = path.join(opts.projectPath, 'outputs');
+  const logger = new Logger(outputDir, opts.projectPath);
+  let running = [];
+  let browser = null;
+  let context = null;
+  let globalTimer = null;
+
+  try {
+    // Global timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      globalTimer = setTimeout(() => reject(new Error('Global timeout exceeded (5 min)')), GLOBAL_TIMEOUT);
+    });
+
+    const pipeline = async () => {
+      console.log('🔍 RunSight v0.1.0');
+      console.log(`📁 Project: ${opts.projectPath}`);
+
+      // 1. Detect projects
+      logger.info('Detecting project type...');
+      const projects = await detectProjects(opts.projectPath);
+      if (!projects.length) throw new Error('No supported project detected');
+      for (const p of projects) logger.info(`Found: ${p.name} (${p.framework})`);
+
+      // 2. Start all services
+      logger.info('Starting services...');
+      running = await runProjects(projects, logger);
+      const frontend = identifyFrontend(running);
+      if (!frontend) throw new Error('No frontend service detected');
+      logger.info(`Frontend: ${frontend.url}`);
+
+      // 3. Launch browser
+      logger.info('Launching browser...');
+      browser = await chromium.launch({ headless: opts.headless });
+
+      // 4. Create context (with or without video)
+      const recorder = new Recorder(outputDir);
+      if (recorder.isEnabled(opts)) {
+        context = await recorder.createContext(browser);
+      } else {
+        context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+      }
+
+      // 5. Navigate to frontend
+      const page = await context.newPage();
+      logger.info(`Navigating to ${frontend.url}...`);
+      await page.goto(frontend.url, { waitUntil: 'networkidle', timeout: 30000 });
+
+      // 6. Explore
+      const screenshotter = new Screenshotter(outputDir);
+      logger.info('Starting exploration...');
+      const result = await explore(page, opts, logger, screenshotter);
+
+      // 7. Stop recording
+      let videoPath = null;
+      if (recorder.isEnabled(opts)) {
+        logger.info('Saving video...');
+        videoPath = await recorder.stop(context);
+        context = null; // Already closed by recorder.stop
+      }
+
+      // 8. Save logs and report
+      logger.save(result.summary);
+      const reportPath = path.join(outputDir, 'report.json');
+
+      // Collect screenshot paths
+      const screenshots = result.steps
+        .filter(s => s.screenshot)
+        .map(s => s.screenshot);
+
+      return { screenshots, video: videoPath, report: reportPath, summary: result.summary };
+    };
+
+    return await Promise.race([pipeline(), timeoutPromise]);
+  } catch (err) {
+    logger.error(err.message);
+    logger.save('Failed: ' + err.message);
+    throw err;
+  } finally {
+    clearTimeout(globalTimer);
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+    killAll(running);
+  }
 }
 
 module.exports = { runSight };
