@@ -57,11 +57,17 @@ async function runSight(options = {}) {
       if (!projects.length) throw new Error('No supported project detected');
       for (const p of projects) logger.info(`Found: ${p.name} (${p.framework})`);
 
+      // Log README context if available
+      if (projects[0] && projects[0].readme) {
+        const readmePreview = projects[0].readme.split('\n').slice(0, 5).join(' ').trim();
+        logger.info(`README: ${readmePreview.slice(0, 150)}...`);
+      }
+
       // 2. Start all services
       logger.info('Starting services...');
       running = await runProjects(projects, logger);
       const frontend = identifyFrontend(running);
-      if (!frontend) throw new Error('No frontend service detected');
+      if (!frontend) throw new Error('No service started successfully. Check project setup.');
       logger.info(`Frontend: ${frontend.url}`);
 
       // 3. Launch browser
