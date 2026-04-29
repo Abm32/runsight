@@ -36,7 +36,7 @@ graph TD
 | Port Detector | `utils/portDetector.js` | Parse ports from stdout via regex, TCP poll with timeout. Zero external deps. |
 | Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery (links, buttons, inputs, selects). Filters by visibility/size. Executes with dummy data. |
 | Priority | `strategies/priorityStrategy.js` | Score elements by semantic importance (nav +30, primary btn +25, input +20, etc). Visit tracker prevents repeats. |
-| LLM | `strategies/llmStrategy.js` | Vision LLM-guided action selection |
+| LLM | `strategies/llmStrategy.js` | Vision LLM-guided action selection. Supports OpenAI GPT-4o and Anthropic Claude. Validates API keys, parses JSON responses, graceful fallback on error. |
 
 ## Data Flow
 
