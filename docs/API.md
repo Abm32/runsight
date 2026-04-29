@@ -33,11 +33,44 @@ const result = await runSight({
 ```js
 {
   screenshots: ['outputs/screenshots/step-1-initial.png', ...],
-  video: 'outputs/videos/session.webm',
+  video: 'outputs/videos/session.mp4',  // or session.webm, or null if --no-video
   report: 'outputs/report.json',
   summary: 'Clicked Login → navigated to /dashboard → ...'
 }
 ```
+
+#### Errors
+
+| Error | Cause |
+|-------|-------|
+| `No supported project detected` | No `package.json`, `requirements.txt`, or `index.html` found |
+| `No frontend service detected` | Services started but none identified as frontend |
+| `OPENAI_API_KEY environment variable is required...` | `--llm-provider=openai` used without API key |
+| `ANTHROPIC_API_KEY environment variable is required...` | `--llm-provider=anthropic` used without API key |
+| `Global timeout exceeded (5 min)` | Pipeline took longer than 5 minutes |
+
+## Internal Modules
+
+### `detectProjects(projectPath)` — `agent/detector.js`
+Returns array of detected project configurations.
+
+### `runProjects(projects, logger)` — `agent/runner.js`
+Installs deps and starts dev servers. Returns running process handles.
+
+### `killAll(running)` — `agent/runner.js`
+Terminates all running server processes.
+
+### `explore(page, options, logger, screenshotter)` — `agent/explorer.js`
+Runs the 3-tier exploration loop on a Playwright page.
+
+### `findInteractableElements(page)` — `strategies/heuristicStrategy.js`
+Discovers all visible, enabled, interactable DOM elements.
+
+### `prioritizeElements(elements)` — `strategies/priorityStrategy.js`
+Scores and sorts elements by exploration priority.
+
+### `getNextAction(screenshot, elements, history, provider)` — `strategies/llmStrategy.js`
+Asks an LLM to choose the next action based on a screenshot.
 
 ## CLI
 
