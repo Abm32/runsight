@@ -70,7 +70,7 @@ async function explore(page, options, logger, screenshotter) {
 
       if (options.llmProvider) {
         const screenshotBuf = fs.readFileSync(ssPath);
-        const llmResult = await getNextAction(screenshotBuf, prioritized, history, options.llmProvider);
+        const llmResult = await getNextAction(screenshotBuf, prioritized, history, options.llmProvider, options.guide || null);
         if (llmResult && llmResult.elementIndex >= 0 && llmResult.elementIndex < prioritized.length) {
           chosen = prioritized[llmResult.elementIndex];
           choiceReason = `LLM: ${llmResult.reason}`;

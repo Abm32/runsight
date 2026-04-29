@@ -63,6 +63,14 @@ async function runSight(options = {}) {
         logger.info(`README: ${readmePreview.slice(0, 150)}...`);
       }
 
+      // Log guide if available, or suggest creating one
+      const guide = projects[0] && projects[0].guide;
+      if (guide) {
+        logger.info(`Guide: .runsight file found — agent will follow navigation instructions`);
+      } else {
+        logger.info(`Tip: Add a .runsight file to guide the agent (see docs)`);
+      }
+
       // 2. Start all services
       logger.info('Starting services...');
       running = await runProjects(projects, logger);
@@ -90,7 +98,8 @@ async function runSight(options = {}) {
       // 6. Explore
       const screenshotter = new Screenshotter(outputDir);
       logger.info('Starting exploration...');
-      const result = await explore(page, opts, logger, screenshotter);
+      const exploreOpts = { ...opts, guide };
+      const result = await explore(page, exploreOpts, logger, screenshotter);
 
       // 7. Stop recording
       let videoPath = null;
