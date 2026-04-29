@@ -39,7 +39,7 @@ test: verify detector against mock project structures
 
 ```bash
 git clone <repo>
-cd KiroVision
+cd runsight
 git checkout v0.1.0-dev
 npm install
 ```

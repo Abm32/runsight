@@ -107,7 +107,7 @@ jobs:
 |--------|-------------|---------|
 | `NPM_TOKEN` | GitHub → Settings → Secrets → Actions | Authenticates `npm publish` |
 
-**Location:** https://github.com/Abm32/KiroVision/settings/secrets/actions
+**Location:** https://github.com/Abm32/runsight/settings/secrets/actions
 
 **To rotate the token:**
 1. Go to https://www.npmjs.com/settings/tokens
@@ -118,7 +118,7 @@ jobs:
 ## Monitoring
 
 After pushing a tag, check the publish status at:
-**https://github.com/Abm32/KiroVision/actions**
+**https://github.com/Abm32/runsight/actions**
 
 - ✅ Green = published successfully
 - ❌ Red = failed (check logs for error)
