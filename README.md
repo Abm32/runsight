@@ -173,6 +173,16 @@ The agent reads this file and includes it in every LLM decision, so it knows whi
 
 Supported filenames: `.runsight`, `.runsight.md`, `RUNSIGHT.md`
 
+### Generating the guide with AI
+
+Paste this prompt into your AI tool (Kiro CLI, Claude, Cursor, ChatGPT) while in your project:
+
+```
+Analyze this project and create a .runsight file for the RunSight autonomous browser agent. Read the source code and README, then generate a guide with these sections: ## Pages (list every route), ## Important flows (numbered user flows with exact button text in quotes), ## Keyboard actions (if the app uses keyboard input), ## Skip these (elements to ignore). Use exact UI text in quotes. Save as .runsight in the project root.
+```
+
+See [docs/GUIDE_TEMPLATE.md](docs/GUIDE_TEMPLATE.md) for the full prompt and examples.
+
 ## Limitations (v0.1.0)
 
 - Single-page apps with client-side routing may not be fully explored
