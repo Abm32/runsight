@@ -10,9 +10,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - README.md-aware project detection — reads README for project context before scanning
 - Graceful sub-service failure handling — warns and continues instead of crashing
+- `.runsight` guide file support — tells the agent how to navigate your app
+- `.runsight` guide template with ready-to-use AI prompt (`docs/GUIDE_TEMPLATE.md`)
+- Keyboard action support — parse from `.runsight` guide, execute during gameplay
+- EADDRINUSE auto-recovery — detects port conflicts, kills blocking process, retries
+- Error log files — saves detailed `error-<name>.log` with process output on failure
+- Dynamic UI polling — waits up to 30s for new elements after page state changes
 
 ### Fixed
 - No longer treats subdirectories (public/, video/, etc.) as separate services when root has a runnable server
+- Range/hidden/color/file inputs skipped during exploration (caused timeouts)
+- Input selector builder uses type+name attributes instead of text content
+- Failed elements marked as clicked to prevent retry loops
+- Variable scoping bug in explorer catch block (`chosen is not defined`)
 - Expanded ignore list for non-service directories (dist, build, out, public, static, etc.)
 
 ### Changed
