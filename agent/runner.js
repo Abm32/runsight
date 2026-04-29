@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 const { parsePortFromOutput, waitForPort } = require('../utils/portDetector');
 
@@ -19,12 +21,12 @@ async function runProjects(projects, logger) {
       // Install dependencies
       if (project.installCmd) {
         logger.info(`Installing: ${project.installCmd}`);
-        await runCommand(project.installCmd, project.path, 120000);
+        await runCommand(project.installCmd, project.path, 120000, logger);
       }
 
       // Start dev server
       logger.info(`Starting: ${project.runCmd}`);
-      const { proc, port } = await startServer(project);
+      const { proc, port } = await startServer(project, logger);
       const url = `http://localhost:${port}`;
       logger.info(`${project.name} ready at ${url}`);
 
@@ -37,6 +39,8 @@ async function runProjects(projects, logger) {
       });
     } catch (err) {
       logger.error(`Failed to start ${project.name}: ${err.message} — skipping`);
+      // Save detailed error log to outputs
+      saveErrorLog(project, err);
     }
   }
 
@@ -44,26 +48,64 @@ async function runProjects(projects, logger) {
 }
 
 /**
+ * Save detailed error output to <projectPath>/outputs/error-<name>.log
+ */
+function saveErrorLog(project, err) {
+  try {
+    const outDir = path.join(project.path, 'outputs');
+    fs.mkdirSync(outDir, { recursive: true });
+    const logPath = path.join(outDir, `error-${project.name}.log`);
+    const content = [
+      `RunSight Error Log — ${new Date().toISOString()}`,
+      `Project: ${project.name} (${project.framework})`,
+      `Path: ${project.path}`,
+      `Install command: ${project.installCmd || 'none'}`,
+      `Run command: ${project.runCmd}`,
+      `Expected port: ${project.expectedPort}`,
+      '',
+      '--- Error ---',
+      err.message,
+      '',
+      '--- Process Output ---',
+      err.processOutput || '(no output captured)',
+    ].join('\n');
+    fs.writeFileSync(logPath, content);
+    console.error(`  📄 Error details saved to ${logPath}`);
+  } catch { /* best effort */ }
+}
+
+/**
  * Run a command and wait for it to complete.
  */
-function runCommand(cmd, cwd, timeout = 120000) {
+function runCommand(cmd, cwd, timeout = 120000, logger) {
   return new Promise((resolve, reject) => {
     const [bin, ...args] = cmd.split(' ');
     const proc = spawn(bin, args, { cwd, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+
+    proc.stdout.on('data', (d) => { output += d.toString(); });
+    proc.stderr.on('data', (d) => { output += d.toString(); });
 
     const timer = setTimeout(() => {
       proc.kill('SIGTERM');
-      reject(new Error(`Command timed out after ${timeout}ms: ${cmd}`));
+      const err = new Error(`Command timed out after ${timeout}ms: ${cmd}`);
+      err.processOutput = output;
+      reject(err);
     }, timeout);
 
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (code === 0) resolve();
-      else reject(new Error(`Command failed with code ${code}: ${cmd}`));
+      else {
+        const err = new Error(`Command failed with code ${code}: ${cmd}`);
+        err.processOutput = output;
+        reject(err);
+      }
     });
 
     proc.on('error', (err) => {
       clearTimeout(timer);
+      err.processOutput = output;
       reject(err);
     });
   });
@@ -72,35 +114,42 @@ function runCommand(cmd, cwd, timeout = 120000) {
 /**
  * Start a dev server and detect its port.
  */
-function startServer(project) {
+function startServer(project, logger) {
   return new Promise((resolve, reject) => {
     const [bin, ...args] = project.runCmd.split(' ');
     const proc = spawn(bin, args, { cwd: project.path, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
 
     let resolved = false;
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        // Fall back to expected port
         waitForPort(project.expectedPort, { timeout: 10000 })
           .then(() => resolve({ proc, port: project.expectedPort }))
           .catch(() => {
             proc.kill('SIGTERM');
-            reject(new Error(`Server did not start: ${project.runCmd}`));
+            const err = new Error(`Server did not start: ${project.runCmd}`);
+            err.processOutput = output;
+            reject(err);
           });
       }
     }, 15000);
 
     function checkOutput(data) {
-      if (resolved) return;
       const text = data.toString();
+      output += text;
+      if (resolved) return;
       const port = parsePortFromOutput(text);
       if (port) {
         resolved = true;
         clearTimeout(timeout);
         waitForPort(port, { timeout: 10000 })
           .then(() => resolve({ proc, port }))
-          .catch(() => reject(new Error(`Port ${port} detected but not connectable`)));
+          .catch(() => {
+            const err = new Error(`Port ${port} detected but not connectable`);
+            err.processOutput = output;
+            reject(err);
+          });
       }
     }
 
@@ -111,6 +160,7 @@ function startServer(project) {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
+        err.processOutput = output;
         reject(err);
       }
     });
@@ -119,7 +169,9 @@ function startServer(project) {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
-        reject(new Error(`Server exited with code ${code}: ${project.runCmd}`));
+        const err = new Error(`Server exited with code ${code}: ${project.runCmd}`);
+        err.processOutput = output;
+        reject(err);
       }
     });
   });
