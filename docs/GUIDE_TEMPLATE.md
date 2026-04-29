@@ -27,11 +27,17 @@ Number the key user flows in order. Example:
 1. Click "Login" → fill email → fill password → click "Submit" → lands on /dashboard
 2. Click "Settings" → toggle dark mode → click "Save"
 
+If the app is a game or interactive experience that requires keyboard input (arrow keys, WASD, space, etc.), include those key presses as EXPLICIT steps in the flow. Example:
+1. Click "Start Game" → game begins
+2. After clicking Start, immediately press ArrowUp and ArrowDown to play — the agent must press these keys to interact with the game
+3. Wait for game over → click "Restart"
+
 ## Keyboard actions
-If the app uses keyboard input (games, shortcuts, editors), list them:
+If the app uses keyboard input (games, shortcuts, editors), list EVERY key the app responds to:
 - Press ArrowUp — description
+- Press ArrowDown — description
 - Press Space — description
-Only include this section if keyboard input is relevant.
+Only include this section if keyboard input is relevant. This is CRITICAL for games — without it the agent cannot play.
 
 ## Skip these
 List elements the agent should ignore (decorative buttons, sliders that don't navigate, canvas elements, etc.)

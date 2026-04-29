@@ -178,7 +178,7 @@ Supported filenames: `.runsight`, `.runsight.md`, `RUNSIGHT.md`
 Paste this prompt into your AI tool (Kiro CLI, Claude, Cursor, ChatGPT) while in your project:
 
 ```
-Analyze this project and create a .runsight file for the RunSight autonomous browser agent. Read the source code and README, then generate a guide with these sections: ## Pages (list every route), ## Important flows (numbered user flows with exact button text in quotes), ## Keyboard actions (if the app uses keyboard input), ## Skip these (elements to ignore). Use exact UI text in quotes. Save as .runsight in the project root.
+Analyze this project and create a .runsight file for the RunSight autonomous browser agent. Read the source code and README, then generate a guide with these sections: ## Pages (list every route), ## Important flows (numbered user flows with exact button text in quotes — if the app is a game or interactive experience that requires keyboard input like arrow keys, space, WASD etc., include those key presses as explicit steps in the flow, e.g. "after clicking Start, immediately press ArrowUp and ArrowDown to play"), ## Keyboard actions (if the app uses keyboard input, list every key: - Press ArrowUp — description), ## Skip these (elements to ignore). Use exact UI text in quotes. Save as .runsight in the project root.
 ```
 
 See [docs/GUIDE_TEMPLATE.md](docs/GUIDE_TEMPLATE.md) for the full prompt and examples.
