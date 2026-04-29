@@ -3,31 +3,83 @@
 const fs = require('fs');
 const path = require('path');
 
+/** Directories that are never independent services */
+const IGNORE_DIRS = [
+  'node_modules', '.git', 'outputs', '.venv', '__pycache__',
+  'dist', 'build', 'out', '.next', '.cache', 'coverage', 'test', 'tests',
+  '__tests__', 'scripts', 'docs', 'assets', 'static', 'public', 'vendor'
+];
+
 /**
  * Detect project type(s) in a directory and return run configurations.
- * Scans root and immediate subdirectories for markers.
+ * Reads README.md for context, then scans for project markers.
  * @param {string} projectPath - Path to scan
- * @returns {Promise<Array<{type: string, name: string, path: string, installCmd: string, runCmd: string, expectedPort: number, framework: string}>>}
+ * @returns {Promise<Array<{type: string, name: string, path: string, installCmd: string, runCmd: string, expectedPort: number, framework: string, readme: string|null}>>}
  */
 async function detectProjects(projectPath) {
   const absPath = path.resolve(projectPath);
-  const projects = [];
 
-  // Scan root
+  // Read README for project context
+  const readme = readReadme(absPath);
+
+  // Check root first
   const rootProject = detectSingle(absPath);
-  if (rootProject) projects.push(rootProject);
 
-  // Scan immediate subdirectories for monorepo/multi-service
+  // If root has a runnable server (express, next, vite, etc.), it's the main project.
+  // Only scan subdirs if root has NO runnable project (true monorepo).
+  if (rootProject) {
+    rootProject.readme = readme;
+    return [rootProject];
+  }
+
+  // No root project — scan subdirectories for monorepo services
+  const projects = [];
   const entries = fs.readdirSync(absPath, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    if (['node_modules', '.git', 'outputs', '.venv', '__pycache__'].includes(entry.name)) continue;
+    if (IGNORE_DIRS.includes(entry.name.toLowerCase())) continue;
     const subPath = path.join(absPath, entry.name);
     const sub = detectSingle(subPath);
-    if (sub) projects.push(sub);
+    if (sub && isLikelyService(sub)) {
+      sub.readme = readme;
+      projects.push(sub);
+    }
   }
 
   return projects;
+}
+
+/**
+ * Read README.md from a directory if it exists.
+ * @param {string} dir
+ * @returns {string|null}
+ */
+function readReadme(dir) {
+  const names = ['README.md', 'readme.md', 'Readme.md', 'README.txt', 'README'];
+  for (const name of names) {
+    const p = path.join(dir, name);
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf8');
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if a detected project looks like a runnable service
+ * (vs a build tool, test suite, or asset directory).
+ */
+function isLikelyService(project) {
+  // Has a start or dev script → likely a service
+  if (project.framework !== 'node') return true;
+  try {
+    const pkgPath = path.join(project.path, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const scripts = pkg.scripts || {};
+    return !!(scripts.start || scripts.dev || scripts.serve);
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -44,6 +96,7 @@ function detectSingle(dir) {
   if (fs.existsSync(pkgPath)) return detectNodeProject(dir, pkgPath);
   if (fs.existsSync(reqPath)) return detectPythonProject(dir, reqPath);
   if (fs.existsSync(pyprojectPath)) return detectPythonProject(dir, null);
+  // Only treat as static if there's no package.json in parent (avoids public/ dirs)
   if (fs.existsSync(indexPath)) return detectStaticProject(dir);
   return null;
 }
@@ -102,7 +155,6 @@ function detectPythonProject(dir, reqPath) {
     ? 'pip install -r requirements.txt'
     : 'pip install .';
 
-  // Read requirements to detect framework
   if (reqPath && fs.existsSync(reqPath)) {
     const reqs = fs.readFileSync(reqPath, 'utf8').toLowerCase();
     if (reqs.includes('django')) {
@@ -120,7 +172,6 @@ function detectPythonProject(dir, reqPath) {
     }
   }
 
-  // Check for manage.py (Django)
   if (fs.existsSync(path.join(dir, 'manage.py'))) {
     framework = 'django';
     runCmd = 'python manage.py runserver';
@@ -149,4 +200,4 @@ function detectStaticProject(dir) {
   };
 }
 
-module.exports = { detectProjects };
+module.exports = { detectProjects, readReadme };
