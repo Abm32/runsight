@@ -2,6 +2,9 @@
 
 const SELECTORS = 'a[href], button, [role="button"], input, textarea, select, [onclick]';
 
+/** Input types to skip entirely during discovery — not useful for exploration */
+const SKIP_INPUT_TYPES = ['hidden', 'range', 'color', 'file', 'image'];
+
 const DUMMY_DATA = {
   email: 'test@example.com',
   password: 'Password123!',
@@ -40,9 +43,10 @@ async function findInteractableElements(page) {
     });
   }, SELECTORS);
 
-  // Filter: visible, enabled, minimum size
+  // Filter: visible, enabled, minimum size, skip non-useful input types
   const filtered = raw.filter(el =>
     el.visible && !el.disabled && el.boundingBox.width > 10 && el.boundingBox.height > 10
+    && !SKIP_INPUT_TYPES.includes(el.inputType)
   );
 
   // Deduplicate by text + href + tagName
@@ -62,8 +66,11 @@ async function findInteractableElements(page) {
 
 function buildSelector(el) {
   if (el.href && el.tagName === 'a') return `a[href="${el.href}"]`;
+  if (el.tagName === 'input' && el.inputType && el.name) return `input[type="${el.inputType}"][name="${el.name}"]`;
+  if (el.tagName === 'input' && el.name) return `input[name="${el.name}"]`;
+  if (el.tagName === 'input' && el.inputType) return `input[type="${el.inputType}"]`;
   if (el.name) return `${el.tagName}[name="${el.name}"]`;
-  if (el.text) return `${el.tagName}:has-text("${el.text.slice(0, 50)}")`;
+  if (el.text && el.tagName !== 'input') return `${el.tagName}:has-text("${el.text.slice(0, 50)}")`;
   return `${el.tagName}:nth-of-type(${el.index + 1})`;
 }
 
