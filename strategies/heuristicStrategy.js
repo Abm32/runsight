@@ -67,6 +67,9 @@ function buildSelector(el) {
   return `${el.tagName}:nth-of-type(${el.index + 1})`;
 }
 
+/** Input types that should NOT be filled with text */
+const NON_FILLABLE = ['range', 'hidden', 'checkbox', 'radio', 'color', 'file', 'image', 'button', 'submit', 'reset'];
+
 /**
  * Execute an action on an element.
  * @param {import('playwright').Page} page
@@ -77,6 +80,13 @@ async function executeAction(page, element) {
   const { tagName, inputType, text, href } = element;
 
   if (tagName === 'input' || tagName === 'textarea') {
+    // Non-fillable inputs: click/toggle instead of fill
+    if (NON_FILLABLE.includes(inputType)) {
+      const locator = page.locator(element.selector).first();
+      await locator.click({ timeout: 3000 });
+      return `Clicked ${inputType} input "${element.name || text}"`;
+    }
+
     const value = getDummyValue(inputType, element.name);
     const locator = page.locator(element.selector).first();
     await locator.click({ timeout: 3000 }).catch(() => {});
