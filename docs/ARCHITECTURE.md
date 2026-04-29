@@ -34,7 +34,7 @@ graph TD
 | Recorder | `agent/recorder.js` | Playwright recordVideo context wrapper. Auto-converts to mp4 if FFmpeg available. |
 | Logger | `utils/logger.js` | Dual output: logs.txt + report.json. Tracks steps, errors, screenshots. |
 | Port Detector | `utils/portDetector.js` | Parse ports from stdout via regex, TCP poll with timeout. Zero external deps. |
-| Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery + action execution |
+| Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery (links, buttons, inputs, selects). Filters by visibility/size. Executes with dummy data. |
 | Priority | `strategies/priorityStrategy.js` | Score-based element ordering |
 | LLM | `strategies/llmStrategy.js` | Vision LLM-guided action selection |
 
