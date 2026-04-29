@@ -24,10 +24,24 @@ async function runProjects(projects, logger) {
         await runCommand(project.installCmd, project.path, 120000, logger);
       }
 
-      // Start dev server
+      // Start dev server (with EADDRINUSE retry)
       logger.info(`Starting: ${project.runCmd}`);
       await ensurePortFree(project.expectedPort);
-      const { proc, port } = await startServer(project, logger);
+      let serverResult;
+      try {
+        serverResult = await startServer(project, logger);
+      } catch (firstErr) {
+        // If EADDRINUSE, parse the port, kill it, retry once
+        const busyPort = parseEADDRINUSE(firstErr.processOutput || firstErr.message);
+        if (busyPort) {
+          logger.info(`Port ${busyPort} in use — killing and retrying...`);
+          await ensurePortFree(busyPort);
+          serverResult = await startServer(project, logger);
+        } else {
+          throw firstErr;
+        }
+      }
+      const { proc, port } = serverResult;
       const url = `http://localhost:${port}`;
       logger.info(`${project.name} ready at ${url}`);
 
@@ -46,6 +60,17 @@ async function runProjects(projects, logger) {
   }
 
   return running;
+}
+
+/**
+ * Parse port number from EADDRINUSE error output.
+ * @param {string} text
+ * @returns {number|null}
+ */
+function parseEADDRINUSE(text) {
+  const match = text.match(/EADDRINUSE[^]*?port[:\s]+(\d+)/i)
+    || text.match(/address already in use[^]*?:(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 /**
