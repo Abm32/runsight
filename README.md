@@ -198,6 +198,7 @@ See [docs/GUIDE_TEMPLATE.md](docs/GUIDE_TEMPLATE.md) for the full prompt and exa
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [API Reference](docs/API.md)
+- [CI/CD Pipeline](docs/CICD.md)
 - [Changelog](docs/CHANGELOG.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing](docs/CONTRIBUTING.md)
