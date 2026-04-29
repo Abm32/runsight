@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { parsePortFromOutput, waitForPort } = require('../utils/portDetector');
+const { parsePortFromOutput, waitForPort, ensurePortFree } = require('../utils/portDetector');
 
 /**
  * Install dependencies and start dev servers for detected projects.
@@ -26,6 +26,7 @@ async function runProjects(projects, logger) {
 
       // Start dev server
       logger.info(`Starting: ${project.runCmd}`);
+      await ensurePortFree(project.expectedPort);
       const { proc, port } = await startServer(project, logger);
       const url = `http://localhost:${port}`;
       logger.info(`${project.name} ready at ${url}`);
