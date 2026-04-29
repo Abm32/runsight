@@ -57,14 +57,17 @@ async function explore(page, options, logger, screenshotter) {
       // If no fresh elements, poll for dynamic content (SPAs, games, modals)
       if (!fresh.length) {
         logger.info('Waiting for new UI elements...');
-        for (let wait = 0; wait < 5; wait++) {
+        for (let wait = 0; wait < 15; wait++) {
           await page.waitForTimeout(2000);
           allElements = await findInteractableElements(page);
           fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
-          if (fresh.length) break;
+          if (fresh.length) {
+            logger.info(`New elements found after ${(wait + 1) * 2}s`);
+            break;
+          }
         }
         if (!fresh.length) {
-          logger.info('No new elements after 10s — stopping');
+          logger.info('No new elements after 30s — stopping');
           break;
         }
       }
