@@ -28,7 +28,7 @@ graph TD
 | CLI | `cli.js` | Parse arguments, invoke API |
 | API | `index.js` | Orchestrate full pipeline |
 | Detector | `agent/detector.js` | Identify project types (Node.js/Python/static), detect frameworks, return run commands. Supports monorepo scanning. |
-| Runner | `agent/runner.js` | Install deps, start servers, manage processes |
+| Runner | `agent/runner.js` | Install deps via spawn, start dev servers, detect ports from stdout, manage process lifecycle. Includes killAll() and identifyFrontend(). |
 | Explorer | `agent/explorer.js` | Drive browser with 3-tier strategy |
 | Screenshotter | `agent/screenshotter.js` | Capture full-page screenshots |
 | Recorder | `agent/recorder.js` | Record session video via Playwright |
