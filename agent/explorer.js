@@ -106,6 +106,8 @@ async function explore(page, options, logger, screenshotter) {
 
       consecutiveErrors = 0;
     } catch (err) {
+      // Mark element as clicked even on failure so we don't retry it
+      if (chosen) tracker.markClicked(tracker.elementKey(chosen));
       consecutiveErrors++;
       logger.error(`Step ${step} failed: ${err.message}`);
       if (consecutiveErrors >= 3) {
