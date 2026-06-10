@@ -5,6 +5,28 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-10
+
+### Added
+- **Demo generator workflow** — RunSight now records an awesome, narratable demo, not just a raw screen capture
+- **Page understanding** (`agent/pageAnalyzer.js`) — on every page, the agent reads each button/link, predicts where it leads, ranks them, and summarizes the page
+- **Two exploration modes, chosen interactively at runtime:**
+  - `llm` — best understanding (reads each element via vision, predicts destinations). Needs an API key.
+  - `heuristic` — free, offline, no key (rule-based ranking + attribute-based destination guesses)
+- **Interactive setup prompts** (`utils/prompt.js`) — choose mode, pick a model, and (only if needed) enter an API key. Keys are held in memory for the run only — never written to disk, logs, or the report; input is masked; env vars are used first
+- **Configurable model catalog** (`config/models.js`) — OpenAI (gpt-4o, gpt-4.1, gpt-4o-mini, gpt-4.1-mini) and Anthropic (claude-sonnet-4, claude-3-5-haiku), including cheaper tiers and a custom model entry
+- **Coverage modes** — `--coverage=happy` (default, focused demo story) and `--coverage=full` (breadth-first crawl of every page)
+- **Auto-edited demo video** (`agent/demoEditor.js`) — burns timed captions onto the recording and encodes a polished `demo.mp4`
+- **Flow narration** (`agent/flowNarrator.js`) — writes `flow.md` with pages visited, predicted destinations, and a step-by-step walkthrough
+- **Bundled FFmpeg** — `@ffmpeg-installer/ffmpeg` is installed with RunSight, so demo editing works out of the box (falls back to system FFmpeg, then to the raw WebM recording)
+- New CLI flags: `--mode`, `--model`, `--coverage`
+
+### Changed
+- `agent/explorer.js` now understands each page before acting (understand → rank → click best → navigate → repeat)
+- `agent/recorder.js` returns the raw WebM; the demo editor owns the single high-quality encode pass
+- Hardened blank-screen detection (settle + re-check) and added recovery from browser error pages (e.g. a server that stops responding mid-run)
+- `report.json` version is now `1.2.0`
+
 ## [1.1.1] - 2026-04-29
 
 ### Changed

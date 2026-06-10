@@ -14,7 +14,10 @@ const result = await runSight({
   headless: true,
   video: true,
   maxSteps: 15,
-  llmProvider: null // 'openai' | 'anthropic' | null
+  mode: 'llm',                // 'llm' | 'heuristic' (prompts if omitted & interactive)
+  llmProvider: 'openai',      // 'openai' | 'anthropic'
+  model: 'gpt-4o-mini',       // model id (prompts if omitted in llm mode)
+  coverage: 'happy'           // 'happy' (demo story) | 'full' (crawl)
 });
 ```
 
@@ -26,14 +29,23 @@ const result = await runSight({
 | `headless` | `boolean` | `true` | Run browser in headless mode |
 | `video` | `boolean` | `true` | Record session video |
 | `maxSteps` | `number` | `15` | Maximum exploration steps |
-| `llmProvider` | `string\|null` | `null` | LLM provider: `'openai'` or `'anthropic'` |
+| `mode` | `'llm'\|'heuristic'\|null` | `null` | Exploration mode. If null and interactive, prompts the user. Non-interactive defaults to `heuristic`. |
+| `llmProvider` | `string\|null` | `null` | LLM provider: `'openai'` or `'anthropic'` (implies `mode: 'llm'`) |
+| `model` | `string\|null` | `null` | Model id for llm mode (e.g. `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-20250514`). Prompts if omitted. |
+| `coverage` | `'happy'\|'full'` | `'happy'` | `happy` = focused demo story; `full` = breadth-first crawl |
+
+> **API keys:** In `llm` mode, the provider's key is read from the environment
+> (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`). If absent and running interactively,
+> RunSight prompts for it with masked input and holds it in memory only — it is
+> never written to disk, logs, or the report.
 
 #### Return Value
 
 ```js
 {
   screenshots: ['outputs/screenshots/step-1-initial.png', ...],
-  video: 'outputs/videos/session.mp4',  // or session.webm, or null if --no-video
+  video: 'outputs/videos/demo.mp4',     // edited demo (or session.webm, or null if --no-video)
+  flow: 'outputs/flow.md',              // human-readable narrative (or null)
   report: 'outputs/report.json',
   summary: 'Clicked Login → navigated to /dashboard → ...'
 }
@@ -84,4 +96,7 @@ runsight [projectPath] [options]
 | `--headless` | Run headless (default: true) |
 | `--no-headless` | Show browser window |
 | `--max-steps <n>` | Max exploration steps (default: 15) |
-| `--llm-provider <p>` | LLM provider: `openai` or `anthropic` |
+| `--mode <m>` | `llm` (best, needs key) or `heuristic` (free). Prompts if omitted. |
+| `--llm-provider <p>` | LLM provider: `openai` or `anthropic` (implies `--mode=llm`) |
+| `--model <id>` | Model id (e.g. `gpt-4o-mini`). Prompts if omitted in llm mode. |
+| `--coverage <c>` | `happy` (demo story, default) or `full` (crawl every page) |

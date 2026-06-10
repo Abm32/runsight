@@ -35,17 +35,22 @@
 - [x] Input filtering (skip range/hidden/color/file)
 - [x] CI/CD pipeline (GitHub Actions → npm auto-publish)
 
-## v1.2.0 — Demo Generator
+## v1.2.0 — Demo Generator ✅ (Current)
 
 The shift from "recording tool" to "demo generator."
 
-- [ ] Auto-edited highlight video — trim dead time, keep only meaningful actions
-- [ ] Flow summary — human-readable narrative ("user signs up → clicks dashboard → views analytics")
-- [ ] Caption overlay — auto-generated text captions on video frames
-- [ ] Screenshot grid — single composite image of all steps for quick sharing
-- [ ] HTML report — visual report with embedded screenshots and video player
-- [ ] Configurable exploration depth per page
-- [ ] Custom action scripts (user-defined exploration steps)
+- [x] LLM-guided page understanding — read each button, predict where it leads, rank, summarize
+- [x] Heuristic fallback mode — free, offline, no API key
+- [x] Interactive setup — choose mode/model, secure in-memory-only API key entry
+- [x] Configurable model catalog with cheaper tiers + custom model entry
+- [x] Coverage modes — happy-path demo story (default) + full breadth-first crawl
+- [x] Auto-edited demo video with burned-in captions (`demo.mp4`)
+- [x] Flow summary — human-readable narrative (`flow.md`)
+- [x] Caption overlay — auto-generated text captions on video frames
+- [x] Bundled FFmpeg — installs with RunSight, works out of the box
+- [ ] Screenshot grid — single composite image of all steps for quick sharing (deferred)
+- [ ] HTML report — visual report with embedded screenshots and video player (deferred)
+- [ ] Custom action scripts (user-defined exploration steps) (deferred)
 
 ## v2.0.0 — Shareable Demo Links
 

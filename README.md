@@ -46,7 +46,7 @@ npx runsight ./my-project
 🌐 Browser launched
 🤖 Exploring UI (15 steps)...
 📸 15 screenshots captured
-🎬 session.mp4 recorded
+🎬 demo.mp4 recorded
 📊 report.json written
 ✅ Done in 8.1s
 ```
@@ -60,19 +60,25 @@ npx runsight ./my-project
 ## Quick Start
 
 ```bash
-# Explore with defaults (headless, video, 15 steps)
+# Interactive: choose mode (LLM or heuristic), pick a model, then explore + record a demo
 runsight ./my-project
 
-# Skip video, limit to 10 steps
-runsight ./my-project --no-video --max-steps=10
+# Free, offline, no API key — rule-based exploration
+runsight ./my-project --mode=heuristic
 
-# Show browser window
-runsight ./my-project --no-headless
+# LLM-guided with a cheap vision model (reads each button, predicts where it leads)
+runsight ./my-project --llm-provider=openai --model=gpt-4o-mini
 
-# Use LLM-guided exploration (requires API key)
-OPENAI_API_KEY=sk-... runsight ./my-project --llm-provider=openai
-ANTHROPIC_API_KEY=sk-... runsight ./my-project --llm-provider=anthropic
+# Crawl every reachable page instead of the focused demo story
+runsight ./my-project --coverage=full
+
+# Skip video, limit to 10 steps; show the browser window
+runsight ./my-project --no-video --max-steps=10 --no-headless
 ```
+
+In LLM mode, the API key is read from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` if set;
+otherwise RunSight prompts for it (masked input, held in memory only — never written
+to disk, logs, or the report).
 
 ## Programmatic API
 
@@ -84,11 +90,14 @@ const result = await runSight({
   headless: true,
   video: true,
   maxSteps: 15,
-  llmProvider: null // 'openai' | 'anthropic'
+  mode: 'llm',           // 'llm' | 'heuristic' (prompts if omitted)
+  llmProvider: 'openai', // 'openai' | 'anthropic'
+  model: 'gpt-4o-mini',  // model id (prompts if omitted in llm mode)
+  coverage: 'happy'      // 'happy' (demo story) | 'full' (crawl)
 });
 
 console.log(result.screenshots); // ['outputs/screenshots/step-1-initial.png', ...]
-console.log(result.video);       // 'outputs/videos/session.mp4'
+console.log(result.video);       // 'outputs/videos/demo.mp4'
 console.log(result.report);      // 'outputs/report.json'
 console.log(result.summary);     // 'Clicked Login → navigated to /dashboard → ...'
 ```
@@ -120,7 +129,10 @@ const result = await runSight({ projectPath: '/path/to/project', maxSteps: 5 });
 | `--video` | `true` | Record session video |
 | `--no-video` | | Disable video recording |
 | `--max-steps <n>` | `15` | Maximum exploration steps |
-| `--llm-provider <p>` | | LLM provider: `openai` or `anthropic` |
+| `--mode <m>` | _(prompts)_ | `llm` (best understanding, needs API key) or `heuristic` (free, offline) |
+| `--llm-provider <p>` | | LLM provider: `openai` or `anthropic` (implies `--mode=llm`) |
+| `--model <id>` | _(prompts)_ | Model id, e.g. `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-20250514` |
+| `--coverage <c>` | `happy` | `happy` = focused demo story; `full` = crawl every page |
 
 ## Output
 
@@ -133,8 +145,9 @@ outputs/
     step-2-step.png
     ...
   videos/
-    session.webm
-    session.mp4      (if FFmpeg available)
+    session.webm     (raw recording)
+    demo.mp4         (edited demo with captions, if FFmpeg available)
+  flow.md            (human-readable walkthrough)
   logs.txt           (human-readable)
   report.json        (machine-readable)
 ```
@@ -143,7 +156,7 @@ outputs/
 
 ```json
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "projectPath": "/path/to/project",
   "startTime": "2026-04-29T06:50:14.957Z",
   "endTime": "2026-04-29T06:50:23.042Z",
@@ -212,8 +225,7 @@ RunSight is not a testing tool. It's the fastest path from code to proof.
 
 | Phase | What changes |
 |-------|-------------|
-| **Now (v1.1.0)** | One command → screenshots, video, report |
-| **Next (v1.2.0)** | Auto-edited highlight video, flow summaries, captions |
+| **Now (v1.2.0)** | One command → auto-edited demo video with captions, flow summary, screenshots, report |
 | **Soon (v2.0.0)** | `runsight.dev/demo/abc123` — shareable demo links |
 | **Future (v3.0.0)** | `git push` → demo auto-generated in CI |
 
@@ -224,11 +236,11 @@ See the full [Roadmap](docs/ROADMAP.md).
 - Node.js 18+
 - Playwright (auto-installed with `npm install`)
 
-## Limitations (v1.1.0)
+## Limitations (v1.2.0)
 
 - Single-page apps with client-side routing may not be fully explored
-- LLM-guided mode requires API keys and incurs costs
-- Video recording adds ~2-3s overhead
+- LLM-guided mode requires API keys and incurs costs (use a cheap model like `gpt-4o-mini` to keep it low)
+- Demo video editing requires FFmpeg — bundled with install; falls back to the raw WebM recording if unavailable
 - No authentication flow support (login forms get dummy data)
 - Port detection relies on stdout patterns — custom servers may need manual URL
 

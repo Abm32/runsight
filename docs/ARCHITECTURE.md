@@ -45,7 +45,12 @@ graph TD
 | Port Detector | `utils/portDetector.js` | Parse ports from stdout via regex, TCP poll with timeout. Zero external deps. |
 | Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery (links, buttons, inputs, selects). Filters by visibility/size. Executes with dummy data. |
 | Priority | `strategies/priorityStrategy.js` | Score elements by semantic importance (nav +30, primary btn +25, input +20, etc). Visit tracker prevents repeats. |
-| LLM | `strategies/llmStrategy.js` | Vision LLM-guided action selection. Supports OpenAI GPT-4o and Anthropic Claude. Validates API keys, parses JSON responses, graceful fallback on error. |
+| LLM | `strategies/llmStrategy.js` | Vision LLM action selection + page analysis (`analyzePage`: read every element, predict destinations, rank, summarize). OpenAI + Anthropic, configurable model, JSON parsing, graceful fallback. |
+| Page Analyzer | `agent/pageAnalyzer.js` | Unifies LLM + heuristic understanding into one ranked, captioned view of a page (per-element predicted destinations, recommended next action, page summary). |
+| Flow Narrator | `agent/flowNarrator.js` | Builds `flow.md` (pages visited, predicted destinations, walkthrough) and a caption timeline aligned to video time. |
+| Demo Editor | `agent/demoEditor.js` | Resolves FFmpeg (bundled → system → none), burns timed captions onto the recording, encodes `demo.mp4`. Graceful fallback to raw WebM. |
+| Prompt | `utils/prompt.js` | Interactive mode/model selection + secure, in-memory-only API key handling (masked input, env-var-first, never persisted). |
+| Models config | `config/models.js` | Configurable catalog of vision models per provider (incl. cheaper tiers + custom). |
 
 ## Data Flow
 
@@ -78,14 +83,14 @@ These modules don't exist yet but represent the architectural direction:
 
 | Module | Phase | Responsibility |
 |--------|-------|----------------|
-| Demo Editor | v1.2.0 | Trim dead time from videos, generate highlight reels, add captions |
-| Flow Narrator | v1.2.0 | Generate human-readable flow summaries from step data |
-| Screenshot Grid | v1.2.0 | Composite single image from all step screenshots |
-| HTML Reporter | v1.2.0 | Visual report with embedded screenshots and video player |
+| Screenshot Grid | v1.2.x | Composite single image from all step screenshots (deferred) |
+| HTML Reporter | v1.2.x | Visual report with embedded screenshots and video player (deferred) |
 | Upload Service | v2.0.0 | Push outputs to `runsight.dev`, return shareable URL |
 | Demo Versioning | v2.0.0 | Compare demos across commits, track changes |
 | CI Plugin | v3.0.0 | GitHub Actions / GitLab CI integration, auto-trigger on push |
 | PR Bot | v3.0.0 | Auto-comment demo links on pull requests |
+
+> Demo Editor and Flow Narrator shipped in v1.2.0 — see the Modules table above.
 
 ## Design Decisions
 
