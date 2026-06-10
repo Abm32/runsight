@@ -27,14 +27,30 @@ const argv = yargs(hideBin(process.argv))
     default: 15,
     describe: 'Maximum exploration steps'
   })
+  .option('mode', {
+    type: 'string',
+    choices: ['llm', 'heuristic'],
+    describe: 'Exploration mode: llm (best understanding, needs API key) or heuristic (free, offline). Prompts if omitted.'
+  })
   .option('llm-provider', {
     type: 'string',
     choices: ['openai', 'anthropic'],
-    describe: 'LLM provider for vision-guided exploration'
+    describe: 'LLM provider for vision-guided exploration (implies --mode=llm)'
   })
-  .example('runsight ./my-project', 'Explore a project with defaults')
-  .example('runsight . --no-video --max-steps=10', 'Skip video, limit to 10 steps')
-  .example('runsight . --llm-provider=openai', 'Use GPT-4o for exploration')
+  .option('model', {
+    type: 'string',
+    describe: 'Model id (e.g. gpt-4o, gpt-4o-mini, claude-sonnet-4-20250514). Prompts if omitted in llm mode.'
+  })
+  .option('coverage', {
+    type: 'string',
+    choices: ['happy', 'full'],
+    default: 'happy',
+    describe: 'happy = focused demo story (default); full = breadth-first crawl of every page'
+  })
+  .example('runsight ./my-project', 'Interactive: choose mode/model, then explore + record a demo')
+  .example('runsight . --mode=heuristic --no-video', 'Free offline mode, skip video')
+  .example('runsight . --llm-provider=openai --model=gpt-4o-mini', 'LLM mode with a cheap vision model')
+  .example('runsight . --coverage=full', 'Crawl every reachable page')
   .epilogue('https://github.com/Abm32/runsight')
   .help()
   .alias('h', 'help')
@@ -49,23 +65,21 @@ async function main() {
     headless: argv.headless,
     video: argv.video,
     maxSteps: argv.maxSteps,
-    llmProvider: argv.llmProvider || null
+    mode: argv.mode || null,
+    llmProvider: argv.llmProvider || null,
+    model: argv.model || null,
+    coverage: argv.coverage || 'happy'
   };
 
   try {
     const result = await runSight(options);
-    if (result.summary) {
-      console.log('\n📋 Summary:', result.summary);
-    }
+    if (result.summary) console.log('\n📋 Summary:', result.summary);
     if (result.screenshots && result.screenshots.length) {
       console.log(`📸 Screenshots: ${result.screenshots.length} captured`);
     }
-    if (result.video) {
-      console.log(`🎬 Video: ${result.video}`);
-    }
-    if (result.report) {
-      console.log(`📊 Report: ${result.report}`);
-    }
+    if (result.video) console.log(`🎬 Video: ${result.video}`);
+    if (result.flow) console.log(`📝 Flow: ${result.flow}`);
+    if (result.report) console.log(`📊 Report: ${result.report}`);
     process.exit(0);
   } catch (err) {
     console.error('❌ RunSight failed:', err.message);
