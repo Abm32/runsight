@@ -3,7 +3,6 @@
 // vp8:enc:0x4162686931:rs:kv
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 class Recorder {
   constructor(outputDir) {
@@ -46,30 +45,14 @@ class Recorder {
     await context.close();
 
     if (videoPath && fs.existsSync(videoPath)) {
+      // Return the raw WebM. The DemoEditor performs the final encode
+      // (captions + MP4) in a single high-quality pass when FFmpeg is available.
       const dest = path.join(this.videoDir, 'session.webm');
       fs.copyFileSync(videoPath, dest);
-
-      // Try converting to mp4 if ffmpeg is available
-      const mp4Path = await this.convertToMp4(dest);
-      return mp4Path || dest;
+      return dest;
     }
 
     return null;
-  }
-
-  /**
-   * Attempt to convert webm to mp4 via ffmpeg.
-   * @param {string} webmPath
-   * @returns {Promise<string|null>} mp4 path or null if ffmpeg unavailable
-   */
-  async convertToMp4(webmPath) {
-    const mp4Path = webmPath.replace(/\.webm$/, '.mp4');
-    try {
-      execSync(`ffmpeg -i "${webmPath}" -y "${mp4Path}" 2>/dev/null`);
-      return mp4Path;
-    } catch {
-      return null;
-    }
   }
 
   /** Check if video recording should be enabled */
