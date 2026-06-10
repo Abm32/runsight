@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULT_MODEL } = require('../config/models');
+
 const SYSTEM_PROMPT = `You are a UI testing agent. You are exploring a web application autonomously.
 Given a screenshot of the current page and a list of interactable elements, choose the BEST next action to explore the application thoroughly.
 
@@ -10,6 +12,27 @@ Rules:
 - Prioritize discovering new pages/features over re-clicking known elements
 
 Respond with ONLY valid JSON: { "elementIndex": <number>, "reason": "<brief explanation>" }`;
+
+const ANALYZE_SYSTEM_PROMPT = `You are a product demo director analyzing a web application page.
+You are given a screenshot of the current page and a numbered list of its interactable elements
+(buttons, links, inputs). Your job is to understand the page and decide how to advance a compelling
+product demo.
+
+For EVERY element, infer what it does and where it likely leads if activated.
+Then rank the elements by how well they advance an engaging demo of the product's core value
+(prefer primary flows and feature-revealing navigation over footer links, legal pages, logout, or
+external links).
+
+Respond with ONLY valid JSON of this exact shape:
+{
+  "pageSummary": "<one sentence describing what this page is and its purpose>",
+  "elements": [
+    { "index": <number>, "label": "<short human label>", "predictedDestination": "<where/what activating it leads to>", "priority": <0-100>, "isPrimary": <true|false> }
+  ],
+  "recommendedIndex": <number>,
+  "recommendedReason": "<why this is the best next step for the demo>",
+  "demoCaption": "<short on-screen caption describing the action we are about to take, e.g. 'Opening the dashboard'>"
+}`;
 
 /**
  * Validate LLM configuration. Throws if API key is missing.
@@ -24,16 +47,67 @@ function validateLLMConfig(provider) {
   }
 }
 
+/** Resolve a usable model id for a provider, falling back to a sensible default. */
+function modelFor(provider, model) {
+  return model || DEFAULT_MODEL[provider] || (provider === 'anthropic' ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini');
+}
+
 /**
- * Ask an LLM to decide the next exploration action.
+ * Analyze a page: understand every element, predict where each leads, rank them,
+ * summarize the page, and recommend the best next action for a demo.
+ *
+ * This is the richer, demo-oriented call. It returns structured data the explorer
+ * uses to drive a happy-path story and to caption the recording.
+ *
+ * @param {Buffer} screenshotBuffer - PNG screenshot of the current page
+ * @param {Array} elements - Interactable elements (from heuristic discovery)
+ * @param {Array<string>} history - Previous action descriptions
+ * @param {string} provider - 'openai' | 'anthropic'
+ * @param {Object} [opts]
+ * @param {string} [opts.model] - model id
+ * @param {string|null} [opts.guide] - .runsight guide content
+ * @param {string} [opts.url] - current page URL (context)
+ * @returns {Promise<{pageSummary: string, elements: Array, recommendedIndex: number, recommendedReason: string, demoCaption: string}|null>}
+ */
+async function analyzePage(screenshotBuffer, elements, history, provider, opts = {}) {
+  const elementList = elements.map((el, i) =>
+    `[${i}] ${el.tagName} "${el.text || el.name || el.href || ''}" (${el.inputType || el.type || 'clickable'})${el.inNav ? ' [nav]' : ''}`
+  ).join('\n');
+
+  let userMsg = '';
+  if (opts.guide) {
+    userMsg += `PROJECT GUIDE (authoritative navigation instructions — follow these):\n${opts.guide}\n\n`;
+  }
+  if (opts.url) userMsg += `Current URL: ${opts.url}\n\n`;
+  userMsg += `Interactable elements on this page:\n${elementList}\n\n`;
+  userMsg += `Actions already taken:\n${history.join('\n') || 'None yet'}\n\n`;
+  userMsg += `Analyze the page and recommend the single best next action to advance the demo.`;
+
+  const b64 = screenshotBuffer.toString('base64');
+  const model = modelFor(provider, opts.model);
+
+  try {
+    const raw = provider === 'anthropic'
+      ? await callAnthropic(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 700)
+      : await callOpenAI(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 700);
+    return parseAnalysis(raw, elements.length);
+  } catch (err) {
+    console.error(`  ⚠️  LLM analyze error (${provider}/${model}): ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Ask an LLM to decide the next exploration action (lightweight, legacy call).
  * @param {Buffer} screenshotBuffer - PNG screenshot
  * @param {Array} elements - Available interactable elements
  * @param {Array<string>} history - Previous action descriptions
  * @param {string} provider - 'openai' or 'anthropic'
  * @param {string|null} [guide] - .runsight guide content
+ * @param {string} [model] - model id
  * @returns {Promise<{elementIndex: number, reason: string}|null>}
  */
-async function getNextAction(screenshotBuffer, elements, history, provider, guide) {
+async function getNextAction(screenshotBuffer, elements, history, provider, guide, model) {
   const elementList = elements.map((el, i) =>
     `[${i}] ${el.tagName} "${el.text || el.name || el.href || ''}" (${el.inputType || el.type || 'clickable'})`
   ).join('\n');
@@ -44,26 +118,32 @@ async function getNextAction(screenshotBuffer, elements, history, provider, guid
   }
   userMsg += `Current page elements:\n${elementList}\n\nPrevious actions:\n${history.join('\n') || 'None yet'}\n\nWhich element should I interact with next?`;
   const b64 = screenshotBuffer.toString('base64');
+  const m = modelFor(provider, model);
 
   try {
-    if (provider === 'openai') return await askOpenAI(b64, userMsg);
-    if (provider === 'anthropic') return await askAnthropic(b64, userMsg);
-    return null;
+    const raw = provider === 'anthropic'
+      ? await callAnthropic(b64, userMsg, SYSTEM_PROMPT, m, 200)
+      : await callOpenAI(b64, userMsg, SYSTEM_PROMPT, m, 200);
+    return parseResponse(raw);
   } catch (err) {
-    console.error(`  ⚠️  LLM error (${provider}): ${err.message}`);
+    console.error(`  ⚠️  LLM error (${provider}/${m}): ${err.message}`);
     return null;
   }
 }
 
-async function askOpenAI(b64Image, userMsg) {
+/**
+ * Single OpenAI vision chat call. Returns the raw text content.
+ * @returns {Promise<string>}
+ */
+async function callOpenAI(b64Image, userMsg, systemPrompt, model, maxTokens) {
   const OpenAI = require('openai');
   const client = new OpenAI();
 
   const resp = await client.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: 200,
+    model,
+    max_tokens: maxTokens,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       {
         role: 'user',
         content: [
@@ -74,17 +154,21 @@ async function askOpenAI(b64Image, userMsg) {
     ]
   });
 
-  return parseResponse(resp.choices[0].message.content);
+  return resp.choices[0].message.content;
 }
 
-async function askAnthropic(b64Image, userMsg) {
+/**
+ * Single Anthropic vision message call. Returns the raw text content.
+ * @returns {Promise<string>}
+ */
+async function callAnthropic(b64Image, userMsg, systemPrompt, model, maxTokens) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic.default();
 
   const resp = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 200,
-    system: SYSTEM_PROMPT,
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
     messages: [{
       role: 'user',
       content: [
@@ -95,12 +179,12 @@ async function askAnthropic(b64Image, userMsg) {
   });
 
   const text = resp.content.find(c => c.type === 'text');
-  return parseResponse(text ? text.text : '');
+  return text ? text.text : '';
 }
 
+/** Parse the lightweight next-action JSON response. */
 function parseResponse(text) {
   try {
-    // Extract JSON from response (may be wrapped in markdown code block)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
@@ -111,4 +195,44 @@ function parseResponse(text) {
   }
 }
 
-module.exports = { getNextAction, validateLLMConfig };
+/**
+ * Parse and sanitize the richer page-analysis JSON response.
+ * @param {string} text
+ * @param {number} elementCount - number of elements (for bounds clamping)
+ */
+function parseAnalysis(text, elementCount) {
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const els = Array.isArray(parsed.elements) ? parsed.elements : [];
+    const clean = els
+      .filter(e => typeof e.index === 'number' && e.index >= 0 && e.index < elementCount)
+      .map(e => ({
+        index: e.index,
+        label: String(e.label || '').slice(0, 120),
+        predictedDestination: String(e.predictedDestination || '').slice(0, 200),
+        priority: Math.max(0, Math.min(100, Number(e.priority) || 0)),
+        isPrimary: Boolean(e.isPrimary)
+      }))
+      .sort((a, b) => b.priority - a.priority);
+
+    let recommendedIndex = Number(parsed.recommendedIndex);
+    if (Number.isNaN(recommendedIndex) || recommendedIndex < 0 || recommendedIndex >= elementCount) {
+      recommendedIndex = clean.length ? clean[0].index : -1;
+    }
+
+    return {
+      pageSummary: String(parsed.pageSummary || '').slice(0, 300),
+      elements: clean,
+      recommendedIndex,
+      recommendedReason: String(parsed.recommendedReason || '').slice(0, 300),
+      demoCaption: String(parsed.demoCaption || '').slice(0, 120)
+    };
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { getNextAction, analyzePage, validateLLMConfig };
