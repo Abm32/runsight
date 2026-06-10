@@ -1,9 +1,8 @@
 'use strict';
 
-const fs = require('fs');
 const { findInteractableElements, executeAction } = require('../strategies/heuristicStrategy');
-const { prioritizeElements, createVisitTracker } = require('../strategies/priorityStrategy');
-const { getNextAction } = require('../strategies/llmStrategy');
+const { createVisitTracker } = require('../strategies/priorityStrategy');
+const { analyzeCurrentPage } = require('./pageAnalyzer');
 
 /** Key name mapping for .runsight guide */
 const KEY_MAP = {
@@ -36,55 +35,72 @@ function parseKeyboardActions(guide) {
 }
 
 /**
- * Autonomously explore a web page using the 3-tier strategy.
+ * Autonomously explore a web page, understanding each page before acting.
+ *
+ * Per page: capture screenshot → discover elements → ANALYZE (understand each
+ * button, predict destinations, rank, summarize) → pick best action → execute →
+ * navigate → repeat. Records rich per-step metadata for narration and video.
+ *
+ * Coverage:
+ *  - 'happy' (default): always take the single best action — a focused demo story.
+ *  - 'full': breadth-first — exhaust each page's actions before moving on.
+ *
  * @param {import('playwright').Page} page
  * @param {Object} options
+ * @param {number} [options.maxSteps=15]
+ * @param {'llm'|'heuristic'} [options.mode='heuristic']
+ * @param {string|null} [options.llmProvider]
+ * @param {string|null} [options.model]
+ * @param {'happy'|'full'} [options.coverage='happy']
+ * @param {string|null} [options.guide]
  * @param {import('../utils/logger').Logger} logger
  * @param {import('./screenshotter').Screenshotter} screenshotter
- * @returns {Promise<{steps: Array, summary: string}>}
+ * @returns {Promise<{steps: Array, summary: string, pages: Array}>}
  */
 async function explore(page, options, logger, screenshotter) {
   const maxSteps = options.maxSteps || 15;
+  const mode = options.mode || (options.llmProvider ? 'llm' : 'heuristic');
+  const coverage = options.coverage === 'full' ? 'full' : 'happy';
   const tracker = createVisitTracker();
   const history = [];
   const steps = [];
+  const pages = []; // page-level summaries for narration
   let consecutiveErrors = 0;
+  const t0 = Date.now();
 
-  // Dismiss dialogs automatically
   page.on('dialog', async (dialog) => {
     logger.info(`Dialog dismissed: ${dialog.message().slice(0, 100)}`);
     await dialog.dismiss().catch(() => {});
   });
+  page.on('pageerror', (err) => logger.error(`Page error: ${err.message}`));
 
-  // Capture page errors
-  page.on('pageerror', (err) => {
-    logger.error(`Page error: ${err.message}`);
-  });
-
-  // Mark initial URL as visited
   tracker.markVisited(page.url());
+  let lastSummarizedUrl = null;
 
   for (let step = 1; step <= maxSteps; step++) {
     let chosen = null;
     try {
-      // 1. Capture screenshot
-      const ssPath = await screenshotter.capture(page, step, step === 1 ? 'initial' : 'step');
+      let ssPath = await screenshotter.capture(page, step, step === 1 ? 'initial' : 'step');
       logger.addScreenshot(step, ssPath);
 
-      // 2. Check for blank screen
-      const isBlank = await screenshotter.detectBlankScreen(page);
-      if (isBlank) {
-        logger.info('Blank screen detected — stopping exploration');
-        break;
+      if (await screenshotter.detectBlankScreen(page)) {
+        // A page can be transiently blank during navigation. Settle and re-check
+        // before deciding the demo is over, so we don't stop prematurely.
+        await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
+        await page.waitForTimeout(800);
+        if (await screenshotter.detectBlankScreen(page)) {
+          logger.info('Blank screen detected — stopping exploration');
+          break;
+        }
+        // Recovered — recapture the now-populated page.
+        ssPath = await screenshotter.capture(page, step, step === 1 ? 'initial' : 'step');
+        logger.addScreenshot(step, ssPath);
       }
 
-      // 3. Find interactable elements (heuristic tier)
       let allElements = await findInteractableElements(page);
-
-      // Filter out already-clicked elements
       let fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
 
-      // If no fresh elements, perform keyboard actions (games) and poll for new UI
+      // No fresh elements → keyboard actions (games) then poll for dynamic UI.
       if (!fresh.length) {
         const keys = parseKeyboardActions(options.guide);
         if (keys.length) {
@@ -93,14 +109,15 @@ async function explore(page, options, logger, screenshotter) {
             for (const key of keys) {
               await page.keyboard.press(key.key);
               logger.step(step, `Pressed ${key.key}`, key.description || '');
+              steps.push(makeStep(step, `Pressed ${key.key}`, key.description || '', null, t0, { kind: 'key' }));
+              const curStep = step;
               step++;
               if (step > maxSteps) break;
               await page.waitForTimeout(key.delay || 500);
-              // Take screenshot during gameplay
-              const gSS = await screenshotter.capture(page, step - 1, 'gameplay');
-              logger.addScreenshot(step - 1, gSS);
+              const gSS = await screenshotter.capture(page, curStep, 'gameplay');
+              logger.addScreenshot(curStep, gSS);
+              if (steps.length) steps[steps.length - 1].screenshot = gSS;
             }
-            // Check if new DOM elements appeared
             allElements = await findInteractableElements(page);
             fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
             if (fresh.length || step > maxSteps) break;
@@ -108,93 +125,145 @@ async function explore(page, options, logger, screenshotter) {
           }
         }
 
-        // Still no elements — poll for dynamic content
         if (!fresh.length && step <= maxSteps) {
           logger.info('Waiting for new UI elements...');
           for (let wait = 0; wait < 15; wait++) {
             await page.waitForTimeout(2000);
             allElements = await findInteractableElements(page);
             fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
-            if (fresh.length) {
-              logger.info(`New elements found after ${(wait + 1) * 2}s`);
-              break;
-            }
+            if (fresh.length) { logger.info(`New elements found after ${(wait + 1) * 2}s`); break; }
           }
         }
 
-        if (!fresh.length) {
-          logger.info('No new elements — stopping');
-          break;
+        if (!fresh.length) { logger.info('No new elements — stopping'); break; }
+      }
+
+      if (!allElements.length) { logger.info('No interactable elements found — stopping'); break; }
+
+      // UNDERSTAND THE PAGE: read every element, predict destinations, rank, summarize.
+      const analysis = await analyzeCurrentPage(page, fresh, {
+        mode, llmProvider: options.llmProvider || null, model: options.model || null,
+        guide: options.guide || null, history, screenshotPath: ssPath
+      });
+
+      // Record a page-level summary once per distinct page.
+      const curUrl = page.url();
+      if (curUrl !== lastSummarizedUrl) {
+        lastSummarizedUrl = curUrl;
+        pages.push({
+          url: curUrl,
+          summary: analysis.pageSummary,
+          elementCount: fresh.length,
+          source: analysis.source,
+          topActions: analysis.ranked.slice(0, 5).map(r => ({
+            label: r.label, predictedDestination: r.predictedDestination, priority: r.priority
+          }))
+        });
+        logger.info(`Page: ${analysis.pageSummary} (${analysis.source})`);
+      }
+
+      // CHOOSE the action(s) for this page based on coverage mode.
+      const actionPlan = coverage === 'full'
+        ? analysis.ranked.map(r => r.element)   // breadth-first: try all, ranked
+        : [analysis.recommended].filter(Boolean); // happy-path: just the best
+
+      for (const target of actionPlan) {
+        if (step > maxSteps) break;
+        chosen = target;
+        const ranking = analysis.ranked.find(r => r.element === target);
+        const caption = (target === analysis.recommended)
+          ? analysis.caption
+          : `Clicking "${ranking ? ranking.label : 'element'}"`;
+        const predictedDestination = ranking ? ranking.predictedDestination : '';
+
+        const prevUrl = page.url();
+        const actionDesc = await executeAction(page, chosen);
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+        // Wait for the URL to settle — some static servers redirect to clean URLs
+        // (e.g. /page.html → /page) slightly after networkidle.
+        const newUrl = await waitForUrlSettle(page, prevUrl);
+        await page.waitForTimeout(400);
+
+        // If the click led to a browser error page (e.g. server stopped responding),
+        // don't mis-report it as navigation. Try to recover by going back.
+        if (/^chrome-error:|^about:neterror/.test(newUrl)) {
+          logger.error(`Action led to an unreachable page (server may have stopped). Attempting to recover...`);
+          await page.goBack({ waitUntil: 'networkidle', timeout: 8000 }).catch(() => {});
+          tracker.markClicked(tracker.elementKey(chosen));
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) { logger.info('Too many unreachable pages — stopping'); break; }
+          break; // re-analyze the (recovered) page on the next outer iteration
         }
+
+        const navigated = newUrl !== prevUrl;
+        if (navigated) tracker.markVisited(newUrl);
+
+        const reason = (target === analysis.recommended) ? analysis.recommendedReason : (ranking ? `priority ${ranking.priority}` : '');
+        const detail = `${reason}${navigated ? ' → navigated to ' + safePath(newUrl) : ''}`;
+        logger.step(step, actionDesc, detail);
+        logger.addScreenshot(step, ssPath); // attach now that the step entry exists
+        tracker.markClicked(tracker.elementKey(chosen));
+        history.push(actionDesc);
+        steps.push(makeStep(step, actionDesc, detail, null, t0, {
+          kind: 'action', caption, predictedDestination, navigated,
+          fromUrl: safePath(prevUrl), toUrl: safePath(newUrl), reason
+        }));
+        // attach screenshot captured at the top of this step to the first action
+        if (steps.length) steps[steps.length - 1].screenshot = ssPath;
+
+        consecutiveErrors = 0;
+        step++;
+
+        // In happy-path mode we only take one action, then re-analyze the new page.
+        if (coverage !== 'full') { step--; break; }
+        // In full mode, the page likely changed after navigation — re-discover.
+        if (navigated) break;
       }
-
-      if (!allElements.length) {
-        logger.info('No interactable elements found — stopping');
-        break;
-      }
-
-      // 4. Prioritize elements (priority tier)
-      const prioritized = prioritizeElements(fresh);
-
-      // 5. Choose element — LLM tier or top priority
-      chosen = null;
-      let choiceReason = '';
-
-      if (options.llmProvider) {
-        const screenshotBuf = fs.readFileSync(ssPath);
-        const llmResult = await getNextAction(screenshotBuf, prioritized, history, options.llmProvider, options.guide || null);
-        if (llmResult && llmResult.elementIndex >= 0 && llmResult.elementIndex < prioritized.length) {
-          chosen = prioritized[llmResult.elementIndex];
-          choiceReason = `LLM: ${llmResult.reason}`;
-        }
-      }
-
-      if (!chosen) {
-        chosen = prioritized[0];
-        choiceReason = `Priority score: ${chosen.score}`;
-      }
-
-      // 6. Execute action
-      const prevUrl = page.url();
-      const actionDesc = await executeAction(page, chosen);
-
-      // 7. Wait for potential navigation
-      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(500);
-
-      // 8. Detect navigation
-      const newUrl = page.url();
-      const navigated = newUrl !== prevUrl;
-      if (navigated) {
-        tracker.markVisited(newUrl);
-      }
-
-      // 9. Log step
-      const detail = `${choiceReason}${navigated ? ' → navigated to ' + new URL(newUrl).pathname : ''}`;
-      logger.step(step, actionDesc, detail);
-      tracker.markClicked(tracker.elementKey(chosen));
-      history.push(actionDesc);
-      steps.push({ step, action: actionDesc, detail, screenshot: ssPath });
 
       consecutiveErrors = 0;
     } catch (err) {
-      // Mark element as clicked even on failure so we don't retry it
       if (chosen) tracker.markClicked(tracker.elementKey(chosen));
       consecutiveErrors++;
       logger.error(`Step ${step} failed: ${err.message}`);
-      if (consecutiveErrors >= 3) {
-        logger.info('Too many consecutive errors — stopping');
-        break;
-      }
+      if (consecutiveErrors >= 3) { logger.info('Too many consecutive errors — stopping'); break; }
     }
   }
 
-  // Generate summary
-  const summary = history.length
-    ? history.join(' → ')
-    : 'No actions taken';
+  const summary = history.length ? history.join(' → ') : 'No actions taken';
+  return { steps, summary, pages };
+}
 
-  return { steps, summary };
+/** Build a rich step record for narration/video. */
+function makeStep(step, action, detail, screenshot, t0, extra = {}) {
+  return {
+    step,
+    action,
+    detail,
+    screenshot,
+    tMs: Date.now() - t0, // ms since exploration start — used to align video captions
+    timestamp: new Date().toISOString(),
+    ...extra
+  };
+}
+
+function safePath(url) {
+  try { return new URL(url).pathname; } catch { return url; }
+}
+
+/**
+ * Wait briefly for the page URL to change/stabilize after an action.
+ * Returns as soon as the URL differs from `prevUrl`, or after a short timeout.
+ * @param {import('playwright').Page} page
+ * @param {string} prevUrl
+ * @returns {Promise<string>} the (possibly new) URL
+ */
+async function waitForUrlSettle(page, prevUrl, { tries = 6, intervalMs = 200 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    const u = page.url();
+    if (u !== prevUrl) return u;
+    await page.waitForTimeout(intervalMs);
+  }
+  return page.url();
 }
 
 module.exports = { explore };
