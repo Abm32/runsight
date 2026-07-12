@@ -13,7 +13,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Two exploration modes, chosen interactively at runtime:**
   - `llm` — best understanding (reads each element via vision, predicts destinations). Needs an API key.
   - `heuristic` — free, offline, no key (rule-based ranking + attribute-based destination guesses)
-- **Interactive setup prompts** (`utils/prompt.js`) — choose mode, pick a model, and (only if needed) enter an API key. Keys are held in memory for the run only — never written to disk, logs, or the report; input is masked; env vars are used first
+- **Interactive setup prompts** (`utils/prompt.js`) — a single unified list of every model (grouped by provider, cheap tiers first) plus a "Heuristic" entry; the API key is only asked for once an LLM model is actually picked, and only if it isn't already in the environment. Keys are held in memory for the run only — never written to disk, logs, or the report; input is masked; env vars are used first
+- **Automatic project-context understanding** (`agent/contextBuilder.js`) — with no `.runsight` guide present, RunSight now reads `package.json` (description, keywords) and detects pages/routes from common framework conventions (Next.js `pages/`/`app/` router, `src/pages`, `src/views`, static multi-page `*.html`) and synthesizes a lightweight guide automatically. This feeds the same LLM prompt and heuristic destination-guessing path a hand-written `.runsight` file would — no setup required for a solid first demo. When a `.runsight` file *is* present, the auto context is appended as supplementary background rather than overriding it
+- **Guide-aware heuristic captions** (`agent/pageAnalyzer.js`) — `guessDestination`/page summaries now cross-reference the `.runsight` guide or auto-generated context to produce more specific narration even with no API key (e.g. "the /dashboard page — main app view" instead of just "the /dashboard page")
+- **Silent non-interactive default** — when running non-interactively (CI, agents) with no `--mode`/`--model` flags, RunSight now automatically uses an available `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` from the environment if present, and falls back to `heuristic` mode without prompting or erroring if not
+- **Resilient postinstall** (`scripts/postinstall.js`) — skips the Chromium download if already installed, and never fails `npm install` in offline/sandboxed environments (falls back to a manual-install hint instead); honors `RUNSIGHT_SKIP_BROWSER_INSTALL`/`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`
+- **Hero output summary** (`cli.js`) — the CLI now prints a boxed "Your demo is ready" block at the end of every run, surfacing `demo.mp4` and `flow.md` first as the shareable artifacts
 - **Configurable model catalog** (`config/models.js`) — OpenAI (gpt-4o, gpt-4.1, gpt-4o-mini, gpt-4.1-mini) and Anthropic (claude-sonnet-4, claude-3-5-haiku), including cheaper tiers and a custom model entry
 - **Coverage modes** — `--coverage=happy` (default, focused demo story) and `--coverage=full` (breadth-first crawl of every page)
 - **Auto-edited demo video** (`agent/demoEditor.js`) — burns timed captions onto the recording and encodes a polished `demo.mp4`
@@ -26,6 +31,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `agent/recorder.js` returns the raw WebM; the demo editor owns the single high-quality encode pass
 - Hardened blank-screen detection (settle + re-check) and added recovery from browser error pages (e.g. a server that stops responding mid-run)
 - `report.json` version is now `1.2.0`
+- `package.json` now declares an explicit `files` field so only the runtime-needed directories are published
 
 ## [1.1.1] - 2026-04-29
 

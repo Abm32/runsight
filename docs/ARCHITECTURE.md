@@ -22,6 +22,7 @@ graph TD
     API --> REC["agent/recorder.js"]
     API --> SS["agent/screenshotter.js"]
     API --> LOG["utils/logger.js"]
+    DET --> CTX["agent/contextBuilder.js"]
     RUN --> PD["utils/portDetector.js"]
     EXP --> HS["strategies/heuristicStrategy.js"]
     EXP --> PS["strategies/priorityStrategy.js"]
@@ -120,3 +121,4 @@ These modules don't exist yet but represent the architectural direction:
 | DOM-based element discovery | Fast, reliable, no vision needed | Misses canvas/WebGL/iframe content |
 | Priority scoring | Deterministic, predictable | May miss context-dependent important elements |
 | LLM vision | Understands visual context | Slow, costly, requires API key |
+ision | Understands visual context | Slow, costly, requires API key |

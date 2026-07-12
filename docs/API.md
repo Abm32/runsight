@@ -37,7 +37,15 @@ const result = await runSight({
 > **API keys:** In `llm` mode, the provider's key is read from the environment
 > (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`). If absent and running interactively,
 > RunSight prompts for it with masked input and holds it in memory only — it is
-> never written to disk, logs, or the report.
+> never written to disk, logs, or the report. Interactively, mode/model selection
+> happens through a single unified list (every LLM model plus a "Heuristic"
+> entry); the key prompt only appears after an LLM model is chosen.
+>
+> **Project understanding:** when no `.runsight` guide file exists, RunSight
+> auto-generates a lightweight project context from `package.json`
+> (description, keywords) and detected pages/routes (`agent/contextBuilder.js`).
+> This feeds both the LLM prompt and the heuristic destination-guessing logic,
+> so demo captions are meaningful without any setup.
 
 #### Return Value
 

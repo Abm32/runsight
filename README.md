@@ -51,17 +51,21 @@ npx runsight ./my-project
 ✅ Done in 8.1s
 ```
 
-1. **Detect** — identifies your project type and framework automatically
+1. **Detect** — identifies your project type and framework automatically, and auto-generates a lightweight understanding of your app (description, pages/routes) from `package.json` and file structure
 2. **Run** — installs dependencies, starts the dev server, detects the port
-3. **Explore** — AI navigates your UI using a 3-tier strategy (heuristic → priority → LLM vision)
+3. **Explore** — AI navigates your UI using a 3-tier strategy (heuristic → priority → LLM vision), informed by that project understanding
 4. **Capture** — screenshots every step, records full session video
-5. **Report** — outputs machine-readable `report.json` + human-readable `logs.txt`
+5. **Report** — outputs machine-readable `report.json` + human-readable `logs.txt`, with `demo.mp4` and `flow.md` as the shareable highlights
 
 ## Quick Start
 
 ```bash
-# Interactive: choose mode (LLM or heuristic), pick a model, then explore + record a demo
-runsight ./my-project
+# Install into your project (or run without installing via npx)
+npm install runsight
+
+# Interactive: pick a model (or "Heuristic" for free/offline), paste an API
+# key only if you picked a model, then RunSight explores + records a demo
+npx runsight ./my-project
 
 # Free, offline, no API key — rule-based exploration
 runsight ./my-project --mode=heuristic
@@ -76,9 +80,16 @@ runsight ./my-project --coverage=full
 runsight ./my-project --no-video --max-steps=10 --no-headless
 ```
 
-In LLM mode, the API key is read from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` if set;
-otherwise RunSight prompts for it (masked input, held in memory only — never written
-to disk, logs, or the report).
+RunSight understands your project automatically — no setup required. It reads
+`package.json` and detects your pages/routes to generate demo captions that
+actually make sense, even before you write a `.runsight` guide (see below).
+
+In interactive runs, you choose a model from one list (or "Heuristic" to skip
+LLM calls entirely); if you pick a model, RunSight then asks for the matching
+API key (masked input, held in memory only — never written to disk, logs, or
+the report). Set `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` in your environment to
+skip that prompt. Non-interactive runs (CI, agents) skip prompting entirely:
+they use an available env key automatically, or fall back to heuristic mode.
 
 ## Programmatic API
 
@@ -183,9 +194,13 @@ outputs/
 | Python | `requirements.txt`, `pyproject.toml` | Django, Flask, FastAPI |
 | Static | `index.html` | Plain HTML/CSS/JS |
 
-## `.runsight` Guide File
+## `.runsight` Guide File (optional)
 
-Add a `.runsight` file to your project root to tell the agent how to navigate your app. This dramatically improves exploration accuracy.
+RunSight auto-detects your pages and reads `package.json` to understand your
+project without any setup. Add a `.runsight` file only when you want to give
+more precise instructions than auto-detection can infer — for example, exact
+button text for a login flow, or keyboard controls for a game. When present,
+it takes priority; the auto-detected context is still included as background.
 
 ```markdown
 # Navigation Guide
