@@ -73,18 +73,34 @@ async function main() {
 
   try {
     const result = await runSight(options);
-    if (result.summary) console.log('\n📋 Summary:', result.summary);
-    if (result.screenshots && result.screenshots.length) {
-      console.log(`📸 Screenshots: ${result.screenshots.length} captured`);
-    }
-    if (result.video) console.log(`🎬 Video: ${result.video}`);
-    if (result.flow) console.log(`📝 Flow: ${result.flow}`);
-    if (result.report) console.log(`📊 Report: ${result.report}`);
+    printHeroSummary(result);
     process.exit(0);
   } catch (err) {
     console.error('❌ RunSight failed:', err.message);
     process.exit(1);
   }
+}
+
+/**
+ * Print a clear, scannable "here's your demo" block at the end of a run.
+ * The video + flow narrative are the hero artifacts — they're what you'd
+ * actually share — so they're surfaced first and boxed for visibility.
+ * @param {Object} result - return value of runSight()
+ */
+function printHeroSummary(result) {
+  const line = '─'.repeat(56);
+  console.log(`\n${line}`);
+  console.log('  ✅ Your demo is ready');
+  console.log(line);
+  if (result.video) console.log(`  🎬 Video      ${result.video}`);
+  if (result.flow) console.log(`  📝 Walkthrough ${result.flow}`);
+  if (result.screenshots && result.screenshots.length) {
+    console.log(`  📸 Screenshots ${result.screenshots.length} captured`);
+  }
+  if (result.report) console.log(`  📊 Report      ${result.report}`);
+  console.log(line);
+  if (result.summary) console.log(`  ${result.summary}`);
+  console.log(`${line}\n`);
 }
 
 main();
