@@ -7,14 +7,19 @@ const { analyzePage } = require('../strategies/llmStrategy');
 /**
  * Heuristic destination guess from an element's attributes — used when there is
  * no LLM, so the demo narration still has something meaningful to say.
+ * When a project guide/context is available (hand-written `.runsight` or
+ * auto-generated from package.json + detected routes), matching route
+ * descriptions are used to make the guess more specific.
  * @param {Object} el
+ * @param {string|null} [guide] - `.runsight` guide or auto-generated project context
  * @returns {string}
  */
-function guessDestination(el) {
+function guessDestination(el, guide) {
   if (el.href) {
     if (/^https?:\/\//i.test(el.href) && !el.href.includes('localhost')) return 'an external site';
-    const path = el.href.replace(/^https?:\/\/[^/]+/i, '') || '/';
-    return `the ${path} page`;
+    const hrefPath = el.href.replace(/^https?:\/\/[^/]+/i, '') || '/';
+    const known = describeRouteFromGuide(hrefPath, guide);
+    return known ? `the ${hrefPath} page — ${known}` : `the ${hrefPath} page`;
   }
   const txt = (el.text || el.name || '').toLowerCase();
   if (/log\s?out|sign\s?out/.test(txt)) return 'sign-out';
@@ -23,7 +28,53 @@ function guessDestination(el) {
   if (/submit|save|continue|next/.test(txt)) return 'the next step in this flow';
   if (el.tagName === 'input' || el.tagName === 'textarea') return 'a filled form field';
   if (el.tagName === 'select') return 'a selected option';
+  // Fall back to matching the button's own text against a route name in the guide
+  // (e.g. a "Dashboard" button when the guide lists a "/dashboard" page).
+  const known = describeRouteFromGuide(txt, guide);
+  if (known) return known;
   return 'an in-page action or state change';
+}
+
+/**
+ * Look up a route path (or button text) against lines like
+ * "- /dashboard — Main app view" in a `.runsight` guide or auto-generated
+ * project context, and return the trailing description if found.
+ * @param {string} needle - a URL path or lowercase button text
+ * @param {string|null} guide
+ * @returns {string|null}
+ */
+function describeRouteFromGuide(needle, guide) {
+  if (!guide || !needle) return null;
+  const clean = needle.replace(/^\//, '').toLowerCase();
+  if (!clean) return null;
+  const lines = guide.split('\n');
+  for (const line of lines) {
+    const m = line.match(/^[-*]\s*\/?([\w-]+)[^\w-]*[—\-:]\s*(.+)$/);
+    if (m && m[1].toLowerCase() === clean) return m[2].trim().slice(0, 140);
+  }
+  return null;
+}
+
+/**
+ * Build a short page summary. Prefers the project's own description
+ * (from package.json / README, via the guide/context text) so the demo
+ * narration reflects what the app actually is instead of just its URL.
+ * @param {string} url
+ * @param {string|null} guide
+ * @returns {string}
+ */
+function summarizePage(url, guide) {
+  const path = safePath(url);
+  const desc = extractProjectDescription(guide);
+  if (desc) return `${path === '/' ? 'Home page' : `Page at ${path}`} — ${desc}`;
+  return `Page at ${path}`;
+}
+
+/** Pull the "## What this project is" line out of an auto-generated context block. */
+function extractProjectDescription(guide) {
+  if (!guide) return null;
+  const m = guide.match(/## What this project is\s*\n([^\n]+)/);
+  return m ? m[1].trim().slice(0, 160) : null;
 }
 
 /**
@@ -65,7 +116,7 @@ async function analyzeCurrentPage(page, elements, ctx) {
   const heuristicRanked = scored.map(el => ({
     element: el,
     label: labelFor(el),
-    predictedDestination: guessDestination(el),
+    predictedDestination: guessDestination(el, ctx.guide),
     priority: el.score,
     isPrimary: false
   }));
@@ -84,7 +135,7 @@ async function analyzeCurrentPage(page, elements, ctx) {
         const ranked = analysis.elements.map(a => ({
           element: elements[a.index],
           label: a.label || labelFor(elements[a.index]),
-          predictedDestination: a.predictedDestination || guessDestination(elements[a.index]),
+          predictedDestination: a.predictedDestination || guessDestination(elements[a.index], ctx.guide),
           priority: a.priority,
           isPrimary: a.isPrimary
         })).filter(r => r.element);
@@ -94,7 +145,7 @@ async function analyzeCurrentPage(page, elements, ctx) {
           || (recEl ? `Clicking "${labelFor(recEl)}"` : 'Exploring the page');
 
         return {
-          pageSummary: analysis.pageSummary || 'Current page',
+          pageSummary: analysis.pageSummary || summarizePage(page.url(), ctx.guide),
           ranked: ranked.length ? ranked : heuristicRanked,
           recommended: recEl || (heuristicRanked[0] && heuristicRanked[0].element) || null,
           recommendedReason: analysis.recommendedReason || 'LLM recommendation',
@@ -110,7 +161,7 @@ async function analyzeCurrentPage(page, elements, ctx) {
   // Heuristic mode (or LLM fallback).
   const top = heuristicRanked[0] || null;
   return {
-    pageSummary: `Page at ${safePath(page.url())}`,
+    pageSummary: summarizePage(page.url(), ctx.guide),
     ranked: heuristicRanked,
     recommended: top ? top.element : null,
     recommendedReason: top ? `Priority score: ${top.priority}` : 'No elements',

@@ -1,7 +1,7 @@
 'use strict';
 
 const readline = require('readline');
-const { PROVIDERS, listAllModels, resolveModel, DEFAULT_MODEL } = require('../config/models');
+const { PROVIDERS, listAllModels, DEFAULT_MODEL } = require('../config/models');
 
 /**
  * Interactive setup prompts for RunSight.
@@ -93,6 +93,12 @@ async function choose(title, options, defaultIndex = 0) {
  * an in-memory API key. Flags take precedence; prompts fill the gaps when
  * running interactively.
  *
+ * Interactive flow (primary UX): a single unified list — every LLM model
+ * (grouped by provider, cheap tiers first) plus one "Heuristic" entry at the
+ * bottom. Whatever is picked, we only ask for an API key afterward, and only
+ * if an LLM model was chosen and no key is already available in the
+ * environment.
+ *
  * @param {Object} flags
  * @param {string} [flags.mode] - 'llm' | 'heuristic'
  * @param {string} [flags.llmProvider] - 'openai' | 'anthropic'
@@ -100,65 +106,68 @@ async function choose(title, options, defaultIndex = 0) {
  * @returns {Promise<{ mode: 'llm'|'heuristic', llmProvider: string|null, model: string|null }>}
  */
 async function resolveExplorationConfig(flags = {}) {
-  // 1. Determine mode.
   let mode = flags.mode || (flags.llmProvider ? 'llm' : null);
-
-  if (!mode) {
-    if (!isInteractive()) {
-      // Non-interactive and unspecified → safe default: heuristic (no key needed).
-      return { mode: 'heuristic', llmProvider: null, model: null };
-    }
-    const idx = await choose(
-      'How should RunSight explore your app?',
-      [
-        { label: 'LLM-guided — best understanding (reads each button, predicts where it leads). Needs an API key.' },
-        { label: 'Heuristic — free, offline, no API key (rule-based ranking).' }
-      ],
-      0
-    );
-    mode = idx === 0 ? 'llm' : 'heuristic';
-  }
-
-  if (mode === 'heuristic') {
-    return { mode: 'heuristic', llmProvider: null, model: null };
-  }
-
-  // 2. LLM mode — pick a model (which determines the provider).
   let provider = flags.llmProvider || null;
   let model = flags.model || null;
 
-  if (!model) {
-    if (provider && DEFAULT_MODEL[provider] && !isInteractive()) {
-      model = DEFAULT_MODEL[provider];
-    } else if (isInteractive()) {
-      const all = listAllModels();
-      const options = all.map(m => ({
-        label: `${m.providerName} · ${m.label}  [${m.tier}]`
-      }));
-      options.push({ label: 'Custom — enter a model id manually' });
-      const idx = await choose('Select a model (cheaper tiers cost less per step):', options, 2);
-      if (idx === options.length - 1) {
-        const provIdx = await choose('Which provider is the custom model?', [
-          { label: 'OpenAI' }, { label: 'Anthropic' }
-        ], 0);
-        provider = provIdx === 0 ? 'openai' : 'anthropic';
-        model = await ask('Enter model id: ');
-      } else {
-        provider = all[idx].provider;
-        model = all[idx].id;
-      }
-    }
+  // Fully specified via flags — nothing to resolve except the API key.
+  if (mode === 'heuristic') return { mode: 'heuristic', llmProvider: null, model: null };
+  if (mode === 'llm' && model) {
+    if (!provider) provider = model.startsWith('claude') ? 'anthropic' : 'openai';
+    await ensureApiKey(provider);
+    return { mode: 'llm', llmProvider: provider, model };
   }
 
-  if (!provider) {
-    // Infer provider from a known model id, else default to openai.
-    provider = resolveModel('anthropic', model) && model.startsWith('claude') ? 'anthropic' : 'openai';
+  // Nothing specified — non-interactive contexts get a safe, silent default:
+  // use an available API key automatically (best UX for CI/agents), else
+  // fall back to the free heuristic mode without prompting.
+  if (!isInteractive()) {
+    if (process.env.OPENAI_API_KEY) return { mode: 'llm', llmProvider: 'openai', model: DEFAULT_MODEL.openai };
+    if (process.env.ANTHROPIC_API_KEY) return { mode: 'llm', llmProvider: 'anthropic', model: DEFAULT_MODEL.anthropic };
+    return { mode: 'heuristic', llmProvider: null, model: null };
   }
 
-  // 3. Ensure we have an API key — env var first, masked prompt as fallback.
+  // Interactive — ask which model to use, choosing the mode implicitly.
+  // If a provider was pinned via flags (--llm-provider without --model),
+  // narrow the list to that provider's models.
+  const all = provider ? listAllModels().filter(m => m.provider === provider) : listAllModels();
+  const options = all.map(m => ({
+    label: `${m.providerName} · ${m.label}  [${m.tier}]${hasKeyFor(m.provider) ? ' (key detected)' : ''}`
+  }));
+  options.push({ label: 'Custom — enter a model id manually' });
+  options.push({ label: 'Heuristic — free, offline, no API key (rule-based ranking)' });
+
+  // Default to the first "cheap" tier model if present, otherwise the first entry.
+  const defaultIdx = Math.max(0, all.findIndex(m => m.tier === 'cheap'));
+  const idx = await choose('Choose a model to explore and demo your app with:', options, defaultIdx);
+
+  if (idx === options.length - 1) {
+    // Heuristic — no key needed.
+    return { mode: 'heuristic', llmProvider: null, model: null };
+  }
+
+  if (idx === options.length - 2) {
+    // Custom model id.
+    const provIdx = await choose('Which provider is the custom model?', [
+      { label: 'OpenAI' }, { label: 'Anthropic' }
+    ], 0);
+    provider = provIdx === 0 ? 'openai' : 'anthropic';
+    model = await ask('Enter model id: ');
+  } else {
+    provider = all[idx].provider;
+    model = all[idx].id;
+  }
+
+  // Ask for the API key only now that an LLM model has actually been chosen.
   await ensureApiKey(provider);
-
   return { mode: 'llm', llmProvider: provider, model };
+}
+
+/** Whether an API key for the given provider is already available in the environment. */
+function hasKeyFor(provider) {
+  const cfg = PROVIDERS[provider];
+  const envVar = cfg ? cfg.envVar : (provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY');
+  return Boolean(process.env[envVar]);
 }
 
 /**
