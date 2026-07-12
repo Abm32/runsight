@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node cli.js",
-    "postinstall": "npx playwright install chromium"
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "demo",
