@@ -79,10 +79,13 @@ async function runSight(options = {}) {
       }
 
       const guide = projects[0] && projects[0].guide;
-      if (guide) {
+      const guideSource = projects[0] && projects[0].guideSource;
+      if (guideSource === 'file') {
         logger.info('Guide: .runsight file found — agent will follow navigation instructions');
+      } else if (guideSource === 'auto') {
+        logger.info('Understanding: auto-generated project context from package.json + detected routes');
       } else {
-        logger.info('Tip: Add a .runsight file to guide the agent (see docs)');
+        logger.info('Tip: Add a .runsight file for more precise navigation instructions (see docs)');
       }
 
       logger.info('Starting services...');
