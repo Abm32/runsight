@@ -47,6 +47,14 @@ const argv = yargs(hideBin(process.argv))
     default: 'happy',
     describe: 'happy = focused demo story (default); full = breadth-first crawl of every page'
   })
+  .option('voice', {
+    type: 'boolean',
+    describe: 'Spoken narration via OpenAI text-to-speech (needs OPENAI_API_KEY). On by default in llm mode when the key is set; --no-voice disables'
+  })
+  .option('music', {
+    type: 'string',
+    describe: 'Path to a background music file to mix under the demo'
+  })
   .example('runsight ./my-project', 'Interactive: choose mode/model, then explore + record a demo')
   .example('runsight . --mode=heuristic --no-video', 'Free offline mode, skip video')
   .example('runsight . --llm-provider=openai --model=gpt-4o-mini', 'LLM mode with a cheap vision model')
@@ -68,7 +76,9 @@ async function main() {
     mode: argv.mode || null,
     llmProvider: argv.llmProvider || null,
     model: argv.model || null,
-    coverage: argv.coverage || 'happy'
+    coverage: argv.coverage || 'happy',
+    voice: argv.voice,
+    music: argv.music || null
   };
 
   try {
