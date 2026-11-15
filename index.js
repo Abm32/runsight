@@ -133,7 +133,7 @@ async function runSight(options = {}) {
       }
 
       const page = await context.newPage();
-      const videoT0 = Date.now(); // timeline origin — the recording starts with the page
+      const videoT0 = present ? await recorder.start(page) : Date.now(); // timeline origin
 
       // Title card: say what this is before showing it.
       const about = describeProject(opts.projectPath, projects[0]);
@@ -147,7 +147,7 @@ async function runSight(options = {}) {
       logger.info(`Navigating to ${frontend.url}...`);
       await page.goto(frontend.url, { waitUntil: 'networkidle', timeout: 30000 });
 
-      const screenshotter = new Screenshotter(outputDir);
+      const screenshotter = new Screenshotter(outputDir, present ? recorder : null);
       logger.info('Starting exploration...');
       const exploreOpts = { ...opts, guide, present, videoT0 };
       const result = await explore(page, exploreOpts, logger, screenshotter);
