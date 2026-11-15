@@ -6,8 +6,11 @@ const path = require('path');
 class Screenshotter {
   /**
    * @param {string} outputDir - Base output directory (screenshots/ will be created inside)
+   * @param {{paused: boolean}|null} [recorder] - paused during captures: a full-page
+   *   screenshot briefly resizes the page, which must not end up in the video
    */
-  constructor(outputDir) {
+  constructor(outputDir, recorder = null) {
+    this.recorder = recorder;
     this.dir = path.join(outputDir, 'screenshots');
     fs.mkdirSync(this.dir, { recursive: true });
   }
@@ -23,7 +26,12 @@ class Screenshotter {
     const safeName = label.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
     const filename = `step-${stepNumber}${safeName ? '-' + safeName : ''}.png`;
     const filePath = path.join(this.dir, filename);
-    await page.screenshot({ path: filePath, fullPage: true });
+    if (this.recorder) this.recorder.paused = true;
+    try {
+      await page.screenshot({ path: filePath, fullPage: true });
+    } finally {
+      if (this.recorder) this.recorder.paused = false;
+    }
     return filePath;
   }
 
