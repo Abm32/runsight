@@ -5,6 +5,12 @@ const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const { runSight } = require('./index');
 
+// `runsight mcp` — serve RunSight to an AI agent (Claude, Cursor, Codex…) over stdio.
+if (process.argv[2] === 'mcp') {
+  require('./mcp').serve();
+  return;
+}
+
 const argv = yargs(hideBin(process.argv))
   .usage('Usage: runsight [projectPath] [options]')
   .positional('projectPath', {
@@ -41,6 +47,10 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     describe: 'Model id (e.g. gpt-4o, gpt-4o-mini, claude-sonnet-4-20250514). Prompts if omitted in llm mode.'
   })
+  .option('base-url', {
+    type: 'string',
+    describe: 'OpenAI-compatible endpoint for your own model (Ollama, LM Studio, OpenRouter, Groq, vLLM…). Needs --model'
+  })
   .option('coverage', {
     type: 'string',
     choices: ['happy', 'full'],
@@ -58,6 +68,8 @@ const argv = yargs(hideBin(process.argv))
   .example('runsight ./my-project', 'Interactive: choose mode/model, then explore + record a demo')
   .example('runsight . --mode=heuristic --no-video', 'Free offline mode, skip video')
   .example('runsight . --llm-provider=openai --model=gpt-4o-mini', 'LLM mode with a cheap vision model')
+  .example('runsight . --base-url=http://localhost:11434/v1 --model=llava', 'Your own local model (Ollama)')
+  .example('runsight mcp', 'Run as an MCP server so Claude / Cursor / Codex can direct the demo')
   .example('runsight . --coverage=full', 'Crawl every reachable page')
   .epilogue('https://github.com/Abm32/runsight')
   .help()
@@ -76,6 +88,7 @@ async function main() {
     mode: argv.mode || null,
     llmProvider: argv.llmProvider || null,
     model: argv.model || null,
+    baseUrl: argv.baseUrl || null,
     coverage: argv.coverage || 'happy',
     voice: argv.voice,
     music: argv.music || null
