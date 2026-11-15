@@ -1,6 +1,6 @@
 'use strict';
 
-const { findInteractableElements, executeAction } = require('../strategies/heuristicStrategy');
+const { findInteractableElements, executeAction, locate } = require('../strategies/heuristicStrategy');
 const { createVisitTracker } = require('../strategies/priorityStrategy');
 const { analyzeCurrentPage, describeAction } = require('./pageAnalyzer');
 const { pointAt, holdMs } = require('./director');
@@ -226,7 +226,7 @@ async function explore(page, options, logger, screenshotter) {
         closeCut();
         const tStart = now();
         const prevUrl = page.url();
-        const point = present ? await pointAt(page, page.locator(chosen.selector).first()) : null;
+        const point = present ? await pointAt(page, await locate(page, chosen)) : null;
         const actionDesc = await executeAction(page, chosen, {
           value: isRecommended ? analysis.inputValue : '',
           typeDelay: present ? 45 : 0,

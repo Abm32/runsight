@@ -58,8 +58,12 @@ const TYPEABLE = ['text', 'email', 'password', 'search', 'tel', 'url', '', null,
  */
 async function findInteractableElements(page) {
   const raw = await page.evaluate((sel) => {
+    // Tag every candidate so it can be addressed exactly later: text or href
+    // selectors are ambiguous ("request" also matches "Try request").
+    document.querySelectorAll('[data-rs-id]').forEach((el) => el.removeAttribute('data-rs-id'));
     const els = Array.from(document.querySelectorAll(sel));
     return els.map((el, i) => {
+      el.setAttribute('data-rs-id', String(i));
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
       return {
@@ -95,12 +99,26 @@ async function findInteractableElements(page) {
     const key = `${el.tagName}|${el.text}|${el.href || ''}|${el.name}|${el.inputType || ''}`;
     if (!seen.has(key)) {
       seen.add(key);
-      el.selector = buildSelector(el);
+      el.selector = `[data-rs-id="${el.index}"]`;
+      el.fallbackSelector = buildSelector(el);
       unique.push(el);
     }
   }
 
   return unique;
+}
+
+/**
+ * Locator for a discovered element: the exact node tagged at discovery, or a
+ * best-effort attribute/text match if the app re-rendered and replaced it.
+ * @param {import('playwright').Page} page
+ * @param {{selector: string, fallbackSelector?: string}} element
+ * @returns {Promise<import('playwright').Locator>}
+ */
+async function locate(page, element) {
+  const exact = page.locator(element.selector);
+  if (!element.fallbackSelector || await exact.count()) return exact.first();
+  return page.locator(element.fallbackSelector).first();
 }
 
 function buildSelector(el) {
@@ -134,13 +152,13 @@ async function executeAction(page, element, opts = {}) {
   if (tagName === 'input' || tagName === 'textarea') {
     // Non-fillable inputs: click/toggle instead of fill
     if (NON_FILLABLE.includes(inputType)) {
-      const locator = page.locator(element.selector).first();
+      const locator = await locate(page, element);
       await locator.click({ timeout: 3000 });
       return `Clicked ${inputType} input "${element.name || text}"`;
     }
 
     const value = opts.value || getDemoValue(element, opts.guide);
-    const locator = page.locator(element.selector).first();
+    const locator = await locate(page, element);
     await locator.click({ timeout: 3000 }).catch(() => {});
     if (opts.typeDelay && (tagName === 'textarea' || TYPEABLE.includes(inputType))) {
       // Type like a person so the viewer can follow what is being entered.
@@ -153,7 +171,7 @@ async function executeAction(page, element, opts = {}) {
   }
 
   if (tagName === 'select') {
-    const locator = page.locator(element.selector).first();
+    const locator = await locate(page, element);
     const options = await locator.locator('option').allTextContents();
     if (options.length > 1) {
       await locator.selectOption({ index: 1 }, { timeout: 3000 });
@@ -163,7 +181,7 @@ async function executeAction(page, element, opts = {}) {
   }
 
   // Default: click (buttons, links, role=button)
-  const locator = page.locator(element.selector).first();
+  const locator = await locate(page, element);
   await locator.click({ timeout: 3000 });
   return `Clicked ${tagName} "${text || href || 'element'}"`;
 }
@@ -206,4 +224,4 @@ function getDemoValue(el, guide) {
   return el.tagName === 'textarea' ? PERSONA.message : PERSONA.text;
 }
 
-module.exports = { findInteractableElements, executeAction, getDemoValue, PERSONA };
+module.exports = { findInteractableElements, executeAction, locate, getDemoValue, PERSONA };
