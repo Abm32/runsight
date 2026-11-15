@@ -5,7 +5,7 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0] - Unreleased
+## [1.3.0] - 2026-11-15
 
 ### Added
 - **MCP server** (`mcp.js`, `runsight mcp`) — use RunSight from Claude Code, Claude Desktop, Cursor, Codex or any MCP client. With `start_demo` → `act` → `finish_demo` the connected agent sees each page and directs the demo itself, so no API key is needed; `record_demo` runs fully automatically

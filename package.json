@@ -1,6 +1,6 @@
 {
   "name": "runsight",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Your project demos itself. One command — your app is explored, recorded, and ready to share.",
   "main": "index.js",
   "bin": {
@@ -22,7 +22,7 @@
     "ai",
     "proof"
   ],
-  "author": "",
+  "author": "Abm32",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -32,7 +32,6 @@
   "bugs": {
     "url": "https://github.com/Abm32/runsight/issues"
   },
-  "author": "Abm32",
   "dependencies": {
     "@anthropic-ai/sdk": "0.39.0",
     "@ffmpeg-installer/ffmpeg": "1.1.0",

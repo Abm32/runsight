@@ -106,6 +106,8 @@ Do not reorganize without discussion. Current structure:
 /outputs        — runtime output (gitignored)
 index.js        — programmatic API entry point
 cli.js          — CLI entry point
+mcp.js          — MCP server entry point (`runsight mcp`)
+/skills         — agent skills shipped with the package
 ```
 
 ## 6. Code Style
