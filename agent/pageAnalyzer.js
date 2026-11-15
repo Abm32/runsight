@@ -3,6 +3,7 @@
 const fs = require('fs');
 const { prioritizeElements } = require('../strategies/priorityStrategy');
 const { analyzePage } = require('../strategies/llmStrategy');
+const { PERSONA } = require('../strategies/heuristicStrategy');
 
 /**
  * Heuristic destination guess from an element's attributes — used when there is
@@ -85,6 +86,30 @@ function labelFor(el) {
   return (el.text || el.name || el.href || el.tagName || 'element').toString().slice(0, 80);
 }
 
+const OPENERS = ['Next,', 'Now', 'Then', 'From here,'];
+
+/**
+ * Build a caption and a spoken line for an action without an LLM.
+ * @param {Object} el - element about to be activated
+ * @param {number} step - step number (varies the sentence opener)
+ * @returns {{caption: string, narration: string}}
+ */
+function describeAction(el, step) {
+  const label = labelFor(el).replace(/\s+/g, ' ');
+  const opener = OPENERS[step % OPENERS.length];
+  if (el.tagName === 'input' || el.tagName === 'textarea') {
+    const field = (el.text || el.name || 'the field').replace(/[_-]+/g, ' ').toLowerCase();
+    return { caption: `Entering ${field}`, narration: `${opener} we fill in the ${field}.` };
+  }
+  if (el.tagName === 'select') {
+    return { caption: 'Choosing an option', narration: `${opener} we pick an option from the list.` };
+  }
+  if (el.href) {
+    return { caption: `Opening ${label}`, narration: `${opener} we open ${label}.` };
+  }
+  return { caption: `Clicking "${label}"`, narration: `${opener} we click ${label}.` };
+}
+
 /**
  * Analyze the current page and return a ranked, understood view of its elements
  * plus the recommended next action and a caption — regardless of mode.
@@ -101,18 +126,33 @@ function labelFor(el) {
  * @param {string|null} ctx.guide
  * @param {Array<string>} ctx.history
  * @param {string} ctx.screenshotPath - path to the current step screenshot (for LLM vision)
+ * @param {number} [ctx.step] - current step number
+ * @param {number} [ctx.maxSteps] - step budget
+ * @param {string[]} [ctx.plan] - demo story beats from earlier steps (LLM mode)
+ * @param {(url: string) => boolean} [ctx.isVisited] - whether a URL was already shown
  * @returns {Promise<{
  *   pageSummary: string,
  *   ranked: Array<{ element: Object, label: string, predictedDestination: string, priority: number, isPrimary: boolean }>,
  *   recommended: Object|null,
  *   recommendedReason: string,
  *   caption: string,
+ *   narration: string,
+ *   inputValue: string,
+ *   plan: string[],
+ *   done: boolean,
  *   source: 'llm'|'heuristic'
  * }>}
  */
 async function analyzeCurrentPage(page, elements, ctx) {
   // Always compute the heuristic baseline — it's the fallback and the floor.
-  const scored = prioritizeElements([...elements], { viewportHeight: 720 });
+  const viewport = page.viewportSize();
+  const history = ctx.history || [];
+  const scored = prioritizeElements([...elements], {
+    viewportHeight: viewport ? viewport.height : 720,
+    url: page.url(),
+    isVisited: ctx.isVisited,
+    lastAction: history[history.length - 1]
+  });
   const heuristicRanked = scored.map(el => ({
     element: el,
     label: labelFor(el),
@@ -128,7 +168,11 @@ async function analyzeCurrentPage(page, elements, ctx) {
       const analysis = await analyzePage(buf, elements, ctx.history || [], ctx.llmProvider, {
         model: ctx.model,
         guide: ctx.guide,
-        url: page.url()
+        url: page.url(),
+        step: ctx.step,
+        maxSteps: ctx.maxSteps,
+        plan: ctx.plan,
+        persona: `${PERSONA.name}, ${PERSONA.email}, password ${PERSONA.password}, company ${PERSONA.company}`
       });
 
       if (analysis && analysis.elements.length) {
@@ -150,6 +194,10 @@ async function analyzeCurrentPage(page, elements, ctx) {
           recommended: recEl || (heuristicRanked[0] && heuristicRanked[0].element) || null,
           recommendedReason: analysis.recommendedReason || 'LLM recommendation',
           caption,
+          narration: analysis.narration || caption,
+          inputValue: analysis.inputValue,
+          plan: analysis.plan,
+          done: analysis.done,
           source: 'llm'
         };
       }
@@ -160,12 +208,18 @@ async function analyzeCurrentPage(page, elements, ctx) {
 
   // Heuristic mode (or LLM fallback).
   const top = heuristicRanked[0] || null;
+  const said = top ? describeAction(top.element, ctx.step || 0) : { caption: 'Exploring the page', narration: '' };
   return {
     pageSummary: summarizePage(page.url(), ctx.guide),
     ranked: heuristicRanked,
     recommended: top ? top.element : null,
     recommendedReason: top ? `Priority score: ${top.priority}` : 'No elements',
-    caption: top ? `Clicking "${top.label}"` : 'Exploring the page',
+    caption: said.caption,
+    narration: said.narration,
+    inputValue: '',
+    plan: [],
+    // Only derailing actions are left (already-seen pages, external or legal links).
+    done: !top || top.priority <= 0,
     source: 'heuristic'
   };
 }
@@ -174,4 +228,4 @@ function safePath(url) {
   try { return new URL(url).pathname; } catch { return url; }
 }
 
-module.exports = { analyzeCurrentPage, guessDestination, labelFor };
+module.exports = { analyzeCurrentPage, guessDestination, labelFor, describeAction };

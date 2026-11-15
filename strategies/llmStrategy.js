@@ -13,25 +13,34 @@ Rules:
 
 Respond with ONLY valid JSON: { "elementIndex": <number>, "reason": "<brief explanation>" }`;
 
-const ANALYZE_SYSTEM_PROMPT = `You are a product demo director analyzing a web application page.
+const ANALYZE_SYSTEM_PROMPT = `You are directing and presenting a short product demo video of a web application.
 You are given a screenshot of the current page and a numbered list of its interactable elements
-(buttons, links, inputs). Your job is to understand the page and decide how to advance a compelling
-product demo.
+(buttons, links, inputs). Decide the next on-camera action.
 
-For EVERY element, infer what it does and where it likely leads if activated.
-Then rank the elements by how well they advance an engaging demo of the product's core value
-(prefer primary flows and feature-revealing navigation over footer links, legal pages, logout, or
-external links).
+Tell a coherent story, like a founder demoing their product:
+- Open by showing what the product is, then walk through its core flow end to end, and finish on a
+  satisfying result (something created, submitted, or revealed).
+- When a form is part of the story, fill its fields one at a time, then submit it. Never submit an
+  empty or half-filled form.
+- Do not revisit pages already shown. Avoid logout, delete, legal/footer and external links.
+- You have a limited number of steps. Spend them on the product's core value.
+
+For EVERY element, infer what it does and where it likely leads if activated, and rank them by how
+well they advance the demo.
 
 Respond with ONLY valid JSON of this exact shape:
 {
   "pageSummary": "<one sentence describing what this page is and its purpose>",
+  "plan": ["<3-6 short beats outlining the whole demo story, updated as you learn the app>"],
   "elements": [
     { "index": <number>, "label": "<short human label>", "predictedDestination": "<where/what activating it leads to>", "priority": <0-100>, "isPrimary": <true|false> }
   ],
   "recommendedIndex": <number>,
   "recommendedReason": "<why this is the best next step for the demo>",
-  "demoCaption": "<short on-screen caption describing the action we are about to take, e.g. 'Opening the dashboard'>"
+  "inputValue": "<if the recommended element is a text field: the realistic value to type, otherwise empty string>",
+  "demoCaption": "<short on-screen caption for the action we are about to take, e.g. 'Opening the dashboard'>",
+  "narration": "<one natural spoken sentence, max 18 words, that a presenter would say during this action: what we are doing and why it matters>",
+  "done": <true only if the demo story is complete and nothing valuable is left to show>
 }`;
 
 /**
@@ -67,7 +76,11 @@ function modelFor(provider, model) {
  * @param {string} [opts.model] - model id
  * @param {string|null} [opts.guide] - .runsight guide content
  * @param {string} [opts.url] - current page URL (context)
- * @returns {Promise<{pageSummary: string, elements: Array, recommendedIndex: number, recommendedReason: string, demoCaption: string}|null>}
+ * @param {number} [opts.step] - current step number
+ * @param {number} [opts.maxSteps] - step budget for the whole demo
+ * @param {string[]} [opts.plan] - demo story beats from earlier steps
+ * @param {string} [opts.persona] - demo persona data to keep form values consistent
+ * @returns {Promise<{pageSummary: string, plan: string[], elements: Array, recommendedIndex: number, recommendedReason: string, inputValue: string, demoCaption: string, narration: string, done: boolean}|null>}
  */
 async function analyzePage(screenshotBuffer, elements, history, provider, opts = {}) {
   const elementList = elements.map((el, i) =>
@@ -79,6 +92,9 @@ async function analyzePage(screenshotBuffer, elements, history, provider, opts =
     userMsg += `PROJECT GUIDE (authoritative navigation instructions — follow these):\n${opts.guide}\n\n`;
   }
   if (opts.url) userMsg += `Current URL: ${opts.url}\n\n`;
+  if (opts.step && opts.maxSteps) userMsg += `This is step ${opts.step} of at most ${opts.maxSteps}.\n\n`;
+  if (opts.plan && opts.plan.length) userMsg += `DEMO PLAN so far (follow it, adapt if the app differs):\n- ${opts.plan.join('\n- ')}\n\n`;
+  if (opts.persona) userMsg += `Demo persona for form fields (use these unless the guide provides data): ${opts.persona}\n\n`;
   userMsg += `Interactable elements on this page:\n${elementList}\n\n`;
   userMsg += `Actions already taken:\n${history.join('\n') || 'None yet'}\n\n`;
   userMsg += `Analyze the page and recommend the single best next action to advance the demo.`;
@@ -88,8 +104,8 @@ async function analyzePage(screenshotBuffer, elements, history, provider, opts =
 
   try {
     const raw = provider === 'anthropic'
-      ? await callAnthropic(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 700)
-      : await callOpenAI(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 700);
+      ? await callAnthropic(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 1500)
+      : await callOpenAI(b64, userMsg, ANALYZE_SYSTEM_PROMPT, model, 1500);
     return parseAnalysis(raw, elements.length);
   } catch (err) {
     console.error(`  ⚠️  LLM analyze error (${provider}/${model}): ${err.message}`);
@@ -228,7 +244,11 @@ function parseAnalysis(text, elementCount) {
       elements: clean,
       recommendedIndex,
       recommendedReason: String(parsed.recommendedReason || '').slice(0, 300),
-      demoCaption: String(parsed.demoCaption || '').slice(0, 120)
+      demoCaption: String(parsed.demoCaption || '').slice(0, 120),
+      narration: String(parsed.narration || '').slice(0, 240),
+      inputValue: String(parsed.inputValue || '').slice(0, 200),
+      plan: Array.isArray(parsed.plan) ? parsed.plan.map(b => String(b).slice(0, 160)).slice(0, 8) : [],
+      done: parsed.done === true
     };
   } catch {
     return null;
