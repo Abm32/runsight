@@ -53,6 +53,11 @@ function cursorInit() {
     // Enable the glide only after the first paint, so the initial placement is instant.
     requestAnimationFrame(() => { cursor.style.transition = 'transform .55s cubic-bezier(.22,.8,.3,1)'; });
 
+    // Framework dev badges / overlays (Next.js) do not belong in a demo.
+    const hideDevTools = () => document.querySelectorAll('nextjs-portal').forEach((n) => { n.style.display = 'none'; });
+    hideDevTools();
+    new MutationObserver(hideDevTools).observe(document.body || document.documentElement, { childList: true });
+
     window.addEventListener('mousemove', (e) => {
       x = e.clientX; y = e.clientY;
       place();
