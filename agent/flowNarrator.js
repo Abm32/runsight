@@ -1,5 +1,7 @@
 'use strict';
 
+const { holdMs } = require('./director');
+
 const fs = require('fs');
 const path = require('path');
 
@@ -27,11 +29,13 @@ function buildNarrative(result, opts = {}) {
   const captions = actionSteps.map((s, i) => {
     const next = actionSteps[i + 1];
     const start = startOf(s, i);
-    const end = next ? startOf(next, i + 1) : start + 3000;
+    // The last caption stays up for as long as the explorer held on the result.
+    const end = next ? startOf(next, i + 1) : start + Math.max(3000, holdMs(s.narration || s.caption));
     return {
       tMs: Math.max(0, start),
       durationMs: Math.max(1200, end - start - 150),
-      text: s.caption || s.action || 'Exploring',
+      // Arrows, emoji and other symbols have no glyph in the caption font (render as boxes).
+      text: String(s.caption || s.action || 'Exploring').replace(/(?![\x20-\x7E])[\p{S}\p{C}]/gu, '').replace(/\s+/g, ' ').trim(),
       narration: s.narration || ''
     };
   });
