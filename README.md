@@ -230,7 +230,7 @@ outputs/
     step-2-step.png
     ...
   videos/
-    session.webm     (raw recording)
+    session.mkv      (raw recording, real-time)
     demo.mp4         (edited 1080p demo: cuts, zoom, captions, voice-over — if FFmpeg available)
   flow.md            (human-readable walkthrough)
   logs.txt           (human-readable)
@@ -335,7 +335,7 @@ See the full [Roadmap](docs/ROADMAP.md).
 
 - Single-page apps with client-side routing may not be fully explored
 - LLM-guided mode requires API keys and incurs costs (use a cheap model like `gpt-4o-mini` to keep it low)
-- Demo video editing requires FFmpeg — bundled with install; falls back to the raw WebM recording if unavailable
+- Demo video editing requires FFmpeg — bundled with install; falls back to a raw, unedited WebM recording if unavailable
 - Login needs credentials you provide (`## Demo data` in `.runsight`); sign-up forms are filled with a demo persona
 - Voice-over requires an OpenAI key; without one the demo has captions only. No music is bundled — pass your own with `--music`
 - Port detection relies on stdout patterns — custom servers may need manual URL

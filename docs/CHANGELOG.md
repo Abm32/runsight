@@ -5,6 +5,17 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - Unreleased
+
+### Fixed
+- **Video out of sync on animated pages** — captions, zooms and cuts drifted by seconds on apps with continuous animation, because Playwright's recorder plays such pages slower than real time. `agent/recorder.js` now captures the screencast itself and stamps frames with the wall clock (raw file is `session.mkv`); Playwright's recorder remains the fallback without FFmpeg
+- **Shrunken grey frames in the video** — full-page screenshots briefly resize the page; the recorder now pauses during them
+- **Wrong element clicked** — text selectors matched by substring (clicking "request" hit "Try request"). Elements are now tagged at discovery and addressed exactly
+- Caption symbols without a font glyph (arrows, emoji) rendered as boxes — stripped from captions
+- Next.js dev badge / overlay showed up in recordings — hidden on camera
+- `npm install` ran on every run even when `node_modules` existed
+- The last caption disappeared after 3 s while the final result was still on screen
+
 ## [1.3.0] - 2026-11-15
 
 ### Added

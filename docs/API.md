@@ -62,7 +62,7 @@ const result = await runSight({
 ```js
 {
   screenshots: ['outputs/screenshots/step-1-initial.png', ...],
-  video: 'outputs/videos/demo.mp4',     // edited demo (or session.webm, or null if --no-video)
+  video: 'outputs/videos/demo.mp4',     // edited demo (or the raw session.mkv, or null if --no-video)
   flow: 'outputs/flow.md',              // human-readable narrative (or null)
   report: 'outputs/report.json',
   summary: 'Clicked Login → navigated to /dashboard → ...'

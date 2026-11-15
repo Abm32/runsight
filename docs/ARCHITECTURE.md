@@ -49,7 +49,7 @@ graph TD
 | Runner | `agent/runner.js` | Install deps via spawn, start dev servers, detect ports from stdout, manage process lifecycle. Includes killAll() and identifyFrontend(). |
 | Explorer | `agent/explorer.js` | 3-tier exploration loop: heuristic discovery → priority scoring → LLM guidance. Dialog handling, error capture, stop conditions, summary generation. |
 | Screenshotter | `agent/screenshotter.js` | Full-page PNG capture with step naming. Blank screen detection via text content check. |
-| Recorder | `agent/recorder.js` | Playwright recordVideo context wrapper. Records a 1280×720 layout at 1.5× device scale (Full HD frames); needs `Recorder.LAUNCH_ARGS` on the browser. Returns the raw WebM. |
+| Recorder | `agent/recorder.js` | Pipes the browser's screencast frames (CDP) into FFmpeg stamped with the wall clock, so recording time equals real time and the edit stays in sync even on animated pages. 1280×720 layout at 1.5× device scale (Full HD frames); needs `Recorder.LAUNCH_ARGS` on the browser. Pauses during full-page screenshots. Falls back to Playwright `recordVideo` without FFmpeg. |
 | Director | `agent/director.js` | On-camera presentation: injected cursor overlay + click ripple, smooth scroll and cursor glide to targets (`pointAt`), intro/outro title cards (`showCard`), read/narration hold times (`holdMs`). |
 | Logger | `utils/logger.js` | Dual output: logs.txt + report.json. Tracks steps, errors, screenshots. |
 | Port Detector | `utils/portDetector.js` | Parse ports from stdout via regex, TCP poll with timeout. Zero external deps. |
@@ -138,4 +138,4 @@ The time a director spends thinking is always cut from the video, so a slow dire
 | DOM-based element discovery | Fast, reliable, no vision needed | Misses canvas/WebGL/iframe content |
 | Priority scoring | Deterministic, predictable | May miss context-dependent important elements |
 | LLM vision | Understands visual context | Slow, costly, requires API key |
-| Wall-clock edit timeline | No frame-accurate sync needed from the recorder | Timing is calibrated, not exact — cuts keep a 300 ms margin |
+| Own screencast recorder | Recording time equals wall-clock time, so the edit timeline is exact | Needs FFmpeg while recording; only the main page (no popups) is captured |
