@@ -130,6 +130,9 @@ function describeAction(el, step) {
  * @param {number} [ctx.maxSteps] - step budget
  * @param {string[]} [ctx.plan] - demo story beats from earlier steps (LLM mode)
  * @param {(url: string) => boolean} [ctx.isVisited] - whether a URL was already shown
+ * @param {(observation: Object) => Promise<Object>} [ctx.decide] - external director; replaces LLM/heuristic choice
+ * @param {(el: Object) => boolean} [ctx.isClicked] - whether an element was already acted on (for `decide`)
+ * @param {string|null} [ctx.lastError] - why the previous step failed, passed on to `decide`
  * @returns {Promise<{
  *   pageSummary: string,
  *   ranked: Array<{ element: Object, label: string, predictedDestination: string, priority: number, isPrimary: boolean }>,
@@ -140,7 +143,7 @@ function describeAction(el, step) {
  *   inputValue: string,
  *   plan: string[],
  *   done: boolean,
- *   source: 'llm'|'heuristic'
+ *   source: 'llm'|'heuristic'|'agent'
  * }>}
  */
 async function analyzeCurrentPage(page, elements, ctx) {
@@ -160,6 +163,42 @@ async function analyzeCurrentPage(page, elements, ctx) {
     priority: el.score,
     isPrimary: false
   }));
+
+  // An outside director (MCP client, custom model) picks the action itself.
+  if (ctx.decide) {
+    const used = (el) => Boolean(ctx.isClicked && ctx.isClicked(el));
+    const top = heuristicRanked.find(r => !used(r.element)) || null;
+    const screenshot = await page.screenshot({ type: 'jpeg', quality: 70 }).catch(() => null);
+    const d = await ctx.decide({
+      url: page.url(),
+      step: ctx.step,
+      maxSteps: ctx.maxSteps,
+      history,
+      lastError: ctx.lastError || null,
+      guide: ctx.guide || null,
+      screenshot, // JPEG buffer of the viewport
+      screenshotPath: ctx.screenshotPath, // full-page PNG on disk
+      suggestedIndex: top ? elements.indexOf(top.element) : -1,
+      elements: elements.map((el, index) => ({
+        index, tag: el.tagName, label: labelFor(el), type: el.inputType || el.type || '', href: el.href || '', used: used(el)
+      }))
+    }) || {};
+    const el = d.done ? null : elements[d.index];
+    if (!d.done && !el) throw new Error(`decide() returned no valid element index (got ${d.index})`);
+    const said = el ? describeAction(el, ctx.step || 0) : { caption: '', narration: '' };
+    return {
+      pageSummary: d.pageSummary || summarizePage(page.url(), ctx.guide),
+      ranked: heuristicRanked,
+      recommended: el,
+      recommendedReason: d.reason || 'Chosen by the directing agent',
+      caption: d.caption || said.caption,
+      narration: d.narration || d.caption || said.narration,
+      inputValue: d.value ? String(d.value) : '',
+      plan: [],
+      done: d.done === true,
+      source: 'agent'
+    };
+  }
 
   // Try LLM analysis when in LLM mode and a screenshot is available.
   if (ctx.mode === 'llm' && ctx.llmProvider && ctx.screenshotPath) {

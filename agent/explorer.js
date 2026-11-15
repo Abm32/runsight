@@ -59,6 +59,7 @@ function parseKeyboardActions(guide) {
  * @param {string|null} [options.model]
  * @param {'happy'|'full'} [options.coverage='happy']
  * @param {string|null} [options.guide]
+ * @param {(observation: Object) => Promise<Object>} [options.decide] - external director that picks each action
  * @param {boolean} [options.present=false] - pace and animate actions for a recording
  * @param {number} [options.videoT0] - epoch ms when the recording started (timeline origin)
  * @param {import('../utils/logger').Logger} logger
@@ -76,6 +77,9 @@ async function explore(page, options, logger, screenshotter) {
   const pages = []; // page-level summaries for narration
   let plan = [];    // demo story beats (LLM mode), carried from step to step
   let consecutiveErrors = 0;
+  let lastError = null; // reported to an external director so it can react
+  // An external director may repeat an action (e.g. add a second item), so it sees every element.
+  const unclicked = (els) => options.decide ? els : els.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
   const t0 = options.videoT0 || Date.now();
   const now = () => Date.now() - t0;
 
@@ -122,7 +126,7 @@ async function explore(page, options, logger, screenshotter) {
       }
 
       let allElements = await findInteractableElements(page);
-      let fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+      let fresh = unclicked(allElements);
 
       // No fresh elements → keyboard actions (games) then poll for dynamic UI.
       if (!fresh.length) {
@@ -147,7 +151,7 @@ async function explore(page, options, logger, screenshotter) {
               if (steps.length) steps[steps.length - 1].screenshot = gSS;
             }
             allElements = await findInteractableElements(page);
-            fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+            fresh = unclicked(allElements);
             if (fresh.length || step > maxSteps) break;
             await page.waitForTimeout(1000);
           }
@@ -159,7 +163,7 @@ async function explore(page, options, logger, screenshotter) {
           for (let wait = 0; wait < 15; wait++) {
             await page.waitForTimeout(2000);
             allElements = await findInteractableElements(page);
-            fresh = allElements.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
+            fresh = unclicked(allElements);
             if (fresh.length) { logger.info(`New elements found after ${(wait + 1) * 2}s`); break; }
           }
         }
@@ -173,8 +177,11 @@ async function explore(page, options, logger, screenshotter) {
       const analysis = await analyzeCurrentPage(page, fresh, {
         mode, llmProvider: options.llmProvider || null, model: options.model || null,
         guide: options.guide || null, history, screenshotPath: ssPath,
-        step, maxSteps, plan, isVisited: (url) => tracker.hasVisited(url)
+        step, maxSteps, plan, isVisited: (url) => tracker.hasVisited(url),
+        decide: options.decide || null, lastError,
+        isClicked: (el) => tracker.hasClicked(tracker.elementKey(el))
       });
+      lastError = null;
       if (analysis.plan.length) {
         if (!plan.length) logger.info(`Demo plan: ${analysis.plan.join(' → ')}`);
         plan = analysis.plan;
@@ -197,7 +204,7 @@ async function explore(page, options, logger, screenshotter) {
       }
 
       // The director decided the story is told — end on this page.
-      if (analysis.done && coverage !== 'full' && history.length >= 2) {
+      if (analysis.done && (analysis.source === 'agent' || (coverage !== 'full' && history.length >= 2))) {
         logger.info('Demo story complete — stopping');
         break;
       }
@@ -282,6 +289,7 @@ async function explore(page, options, logger, screenshotter) {
     } catch (err) {
       if (chosen) tracker.markClicked(tracker.elementKey(chosen));
       consecutiveErrors++;
+      lastError = err.message;
       logger.error(`Step ${step} failed: ${err.message}`);
       if (consecutiveErrors >= 3) { logger.info('Too many consecutive errors — stopping'); break; }
     }
