@@ -213,7 +213,8 @@ function detectNodeProject(dir, pkgPath) {
     type: 'nodejs',
     name: pkg.name || path.basename(dir),
     path: dir,
-    installCmd: 'npm install',
+    // Already installed — reinstalling wastes time and can touch the user's lockfile.
+    installCmd: fs.existsSync(path.join(dir, 'node_modules')) ? null : 'npm install',
     runCmd,
     expectedPort,
     framework
