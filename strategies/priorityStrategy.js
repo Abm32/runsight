@@ -78,7 +78,9 @@ function createVisitTracker() {
 function normalizeUrl(url) {
   try {
     const u = new URL(url);
-    return u.pathname + u.search;
+    // /index.html, /about.html and /about/ are the same pages as /, /about.
+    const pathname = u.pathname.replace(/(^|\/)index\.html?$/, '$1').replace(/\.html?$/, '').replace(/(.)\/$/, '$1');
+    return (pathname || '/') + u.search;
   } catch {
     return url;
   }
