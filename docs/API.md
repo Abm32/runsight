@@ -17,7 +17,9 @@ const result = await runSight({
   mode: 'llm',                // 'llm' | 'heuristic' (prompts if omitted & interactive)
   llmProvider: 'openai',      // 'openai' | 'anthropic'
   model: 'gpt-4o-mini',       // model id (prompts if omitted in llm mode)
-  coverage: 'happy'           // 'happy' (demo story) | 'full' (crawl)
+  coverage: 'happy',          // 'happy' (demo story) | 'full' (crawl)
+  voice: true,                // spoken narration (OpenAI TTS)
+  music: './track.mp3'        // optional background music
 });
 ```
 
@@ -33,6 +35,8 @@ const result = await runSight({
 | `llmProvider` | `string\|null` | `null` | LLM provider: `'openai'` or `'anthropic'` (implies `mode: 'llm'`) |
 | `model` | `string\|null` | `null` | Model id for llm mode (e.g. `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-20250514`). Prompts if omitted. |
 | `coverage` | `'happy'\|'full'` | `'happy'` | `happy` = focused demo story; `full` = breadth-first crawl |
+| `voice` | `boolean` | on in `llm` mode when `OPENAI_API_KEY` is set | Spoken narration via OpenAI text-to-speech. Needs `OPENAI_API_KEY`; skipped with a log line if unavailable |
+| `music` | `string\|null` | `null` | Path to a background music file mixed under the demo |
 
 > **API keys:** In `llm` mode, the provider's key is read from the environment
 > (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`). If absent and running interactively,
@@ -83,6 +87,15 @@ Terminates all running server processes.
 ### `explore(page, options, logger, screenshotter)` — `agent/explorer.js`
 Runs the 3-tier exploration loop on a Playwright page.
 
+### `executeAction(page, element, opts)` — `strategies/heuristicStrategy.js`
+Performs an action. `opts.value` overrides the demo-persona value, `opts.typeDelay` types key by key, `opts.guide` supplies `## Demo data`.
+
+### `installCursor(context)`, `pointAt(page, locator)`, `showCard(page, card, ms)` — `agent/director.js`
+On-camera presentation helpers: visible cursor, glide to a target, title cards.
+
+### `DemoEditor#edit(inputPath, timeline, logger)` — `agent/demoEditor.js`
+Edits the raw recording. `timeline`: `{ captions, zooms, cuts, stills, voice, music, durationMs }` (a bare captions array is still accepted).
+
 ### `findInteractableElements(page)` — `strategies/heuristicStrategy.js`
 Discovers all visible, enabled, interactable DOM elements.
 
@@ -108,3 +121,5 @@ runsight [projectPath] [options]
 | `--llm-provider <p>` | LLM provider: `openai` or `anthropic` (implies `--mode=llm`) |
 | `--model <id>` | Model id (e.g. `gpt-4o-mini`). Prompts if omitted in llm mode. |
 | `--coverage <c>` | `happy` (demo story, default) or `full` (crawl every page) |
+| `--voice` / `--no-voice` | Spoken narration (OpenAI TTS). Default: on in llm mode when `OPENAI_API_KEY` is set |
+| `--music <file>` | Background music mixed under the demo |

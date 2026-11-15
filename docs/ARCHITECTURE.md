@@ -22,6 +22,11 @@ graph TD
     API --> REC["agent/recorder.js"]
     API --> SS["agent/screenshotter.js"]
     API --> LOG["utils/logger.js"]
+    API --> DIR["agent/director.js"]
+    API --> NAR["agent/flowNarrator.js"]
+    API --> VO["agent/voiceover.js"]
+    API --> ED["agent/demoEditor.js"]
+    EXP --> DIR
     DET --> CTX["agent/contextBuilder.js"]
     RUN --> PD["utils/portDetector.js"]
     EXP --> HS["strategies/heuristicStrategy.js"]
@@ -41,15 +46,17 @@ graph TD
 | Runner | `agent/runner.js` | Install deps via spawn, start dev servers, detect ports from stdout, manage process lifecycle. Includes killAll() and identifyFrontend(). |
 | Explorer | `agent/explorer.js` | 3-tier exploration loop: heuristic discovery → priority scoring → LLM guidance. Dialog handling, error capture, stop conditions, summary generation. |
 | Screenshotter | `agent/screenshotter.js` | Full-page PNG capture with step naming. Blank screen detection via text content check. |
-| Recorder | `agent/recorder.js` | Playwright recordVideo context wrapper. Auto-converts to mp4 if FFmpeg available. |
+| Recorder | `agent/recorder.js` | Playwright recordVideo context wrapper. Records a 1280×720 layout at 1.5× device scale (Full HD frames); needs `Recorder.LAUNCH_ARGS` on the browser. Returns the raw WebM. |
+| Director | `agent/director.js` | On-camera presentation: injected cursor overlay + click ripple, smooth scroll and cursor glide to targets (`pointAt`), intro/outro title cards (`showCard`), read/narration hold times (`holdMs`). |
 | Logger | `utils/logger.js` | Dual output: logs.txt + report.json. Tracks steps, errors, screenshots. |
 | Port Detector | `utils/portDetector.js` | Parse ports from stdout via regex, TCP poll with timeout. Zero external deps. |
-| Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery (links, buttons, inputs, selects). Filters by visibility/size. Executes with dummy data. |
-| Priority | `strategies/priorityStrategy.js` | Score elements by semantic importance (nav +30, primary btn +25, input +20, etc). Visit tracker prevents repeats. |
+| Heuristic | `strategies/heuristicStrategy.js` | DOM-order element discovery (links, buttons, inputs, selects). Filters by visibility/size. Executes actions; fills forms from a consistent demo persona or the guide's `## Demo data`, optionally typing key by key. |
+| Priority | `strategies/priorityStrategy.js` | Score elements by semantic importance (nav +30, primary btn +25, input +20, etc) plus story rules: finish a started form before submitting, penalize already-shown pages, external, destructive and legal links. Visit tracker prevents repeats. |
 | LLM | `strategies/llmStrategy.js` | Vision LLM action selection + page analysis (`analyzePage`: read every element, predict destinations, rank, summarize). OpenAI + Anthropic, configurable model, JSON parsing, graceful fallback. |
 | Page Analyzer | `agent/pageAnalyzer.js` | Unifies LLM + heuristic understanding into one ranked, captioned view of a page (per-element predicted destinations, recommended next action, page summary). |
-| Flow Narrator | `agent/flowNarrator.js` | Builds `flow.md` (pages visited, predicted destinations, walkthrough) and a caption timeline aligned to video time. |
-| Demo Editor | `agent/demoEditor.js` | Resolves FFmpeg (bundled → system → none), burns timed captions onto the recording, encodes `demo.mp4`. Graceful fallback to raw WebM. |
+| Flow Narrator | `agent/flowNarrator.js` | Builds `flow.md` (pages visited, predicted destinations, walkthrough) and the edit timeline: captions + narration lines and zoom targets, in wall-clock time. |
+| Demo Editor | `agent/demoEditor.js` | Resolves FFmpeg (bundled → system → none) and builds one filter graph: cut dead time, zoom/pan onto actions, burn captions, mix voice-over and music, encode `demo.mp4`. Maps wall-clock times to recording time (the recorder runs slow during animation). Falls back to a captions-only edit, then to the raw WebM. Self-check: `node agent/demoEditor.js`. |
+| Voice-over | `agent/voiceover.js` | Synthesizes narration clips with OpenAI text-to-speech. Optional; any failure yields a silent demo. |
 | Prompt | `utils/prompt.js` | Interactive mode/model selection + secure, in-memory-only API key handling (masked input, env-var-first, never persisted). |
 | Models config | `config/models.js` | Configurable catalog of vision models per provider (incl. cheaper tiers + custom). |
 
@@ -58,8 +65,9 @@ graph TD
 1. **Detect** → Scan project directory for markers (`package.json`, `requirements.txt`, `index.html`)
 2. **Run** → Install dependencies, start dev servers, detect ports
 3. **Explore** → Launch browser, navigate to frontend URL, execute 3-tier exploration loop
-4. **Capture** → Screenshot at each step, record video for full session
-5. **Report** → Save `logs.txt` (human) + `report.json` (machine) + screenshots + video
+4. **Capture** → Screenshot at each step, record video for full session. With video on, the run is performed on camera: intro card → paced, animated actions → outro card. The explorer reports its thinking time as `cuts`
+5. **Edit** → Narrate (optional voice-over), then cut dead time, zoom onto actions, caption, and mix audio into `demo.mp4`
+6. **Report** → Save `logs.txt` (human) + `report.json` (machine) + screenshots + video
 
 ## Exploration Strategy Tiers
 
@@ -121,4 +129,4 @@ These modules don't exist yet but represent the architectural direction:
 | DOM-based element discovery | Fast, reliable, no vision needed | Misses canvas/WebGL/iframe content |
 | Priority scoring | Deterministic, predictable | May miss context-dependent important elements |
 | LLM vision | Understands visual context | Slow, costly, requires API key |
-ision | Understands visual context | Slow, costly, requires API key |
+| Wall-clock edit timeline | No frame-accurate sync needed from the recorder | Timing is calibrated, not exact — cuts keep a 300 ms margin |

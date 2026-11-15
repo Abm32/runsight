@@ -25,13 +25,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Flow narration** (`agent/flowNarrator.js`) — writes `flow.md` with pages visited, predicted destinations, and a step-by-step walkthrough
 - **Bundled FFmpeg** — `@ffmpeg-installer/ffmpeg` is installed with RunSight, so demo editing works out of the box (falls back to system FFmpeg, then to the raw WebM recording)
 - New CLI flags: `--mode`, `--model`, `--coverage`
+- **On-camera direction** (`agent/director.js`) — the recording now looks like a person presenting: a visible cursor glides to each target with a click ripple, off-screen targets are scrolled to smoothly, text is typed character by character, and each action is held long enough to read. An intro title card (project name + description) and an outro card bookend the video
+- **Auto-zoom, dead-time cuts** (`agent/demoEditor.js`) — the editor zooms in on every action and pans between nearby ones, and cuts out the time the agent spent thinking (screenshots, LLM calls, waiting for UI), so the demo only shows the product moving
+- **Voice-over** (`agent/voiceover.js`) — spoken narration via OpenAI text-to-speech, mixed into `demo.mp4`. On by default in `llm` mode when `OPENAI_API_KEY` is set; `--voice` / `--no-voice` to force. Model and voice configurable via `RUNSIGHT_TTS_MODEL` / `RUNSIGHT_TTS_VOICE`
+- **Background music** — `--music <file>` mixes a track under the demo (looped, ducked under narration, faded out)
+- **Demo story planning** — in `llm` mode the model now acts as a demo director: it keeps a plan of story beats across steps, chooses realistic values to type, writes a spoken narration line per action, and ends the demo when the story is told. In `heuristic` mode ranking is story-aware: forms are filled field by field then submitted, pages already shown are not revisited, and logout/delete/external/legal links are avoided; the run stops when only those are left
+- **Realistic demo data** — forms are filled with a consistent persona (name, email, password, company…) matched on field name/label/placeholder instead of `Test User`. A `## Demo data` (or `## Credentials`) section in `.runsight` supplies real values, e.g. a demo account for login flows
+- New CLI flags / API options: `--voice`, `--music`
 
 ### Changed
 - `agent/explorer.js` now understands each page before acting (understand → rank → click best → navigate → repeat)
 - `agent/recorder.js` returns the raw WebM; the demo editor owns the single high-quality encode pass
 - Hardened blank-screen detection (settle + re-check) and added recovery from browser error pages (e.g. a server that stops responding mid-run)
 - `report.json` version is now `1.2.0`
+- Recording is now crisp Full HD: a 1280×720 layout rendered at 1.5× device scale (was 720p), encoded at higher quality (CRF 18)
+- Captions start when the cursor sets off rather than after the action lands, and are corrected for the recorder's timing drift (Playwright video runs slow while the page animates)
+- After an LLM auth/quota error (401/403/429) the run switches to heuristic exploration instead of retrying on every step
 - `package.json` now declares an explicit `files` field so only the runtime-needed directories are published
+
+### Fixed
+- Text inputs with no `type` attribute could never be filled (selector used `[type="text"]`, which does not match them)
+- Form fields without a placeholder were collapsed into a single element during discovery, so only the first was filled; fields are now also labelled from their `<label>`
+- `/`, `/index.html` and `/page.html` vs `/page` were treated as different pages, causing the home link to be "explored" again
 
 ## [1.1.1] - 2026-04-29
 

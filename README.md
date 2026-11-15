@@ -54,8 +54,9 @@ npx runsight ./my-project
 1. **Detect** — identifies your project type and framework automatically, and auto-generates a lightweight understanding of your app (description, pages/routes) from `package.json` and file structure
 2. **Run** — installs dependencies, starts the dev server, detects the port
 3. **Explore** — AI navigates your UI using a 3-tier strategy (heuristic → priority → LLM vision), informed by that project understanding
-4. **Capture** — screenshots every step, records full session video
-5. **Report** — outputs machine-readable `report.json` + human-readable `logs.txt`, with `demo.mp4` and `flow.md` as the shareable highlights
+4. **Capture** — screenshots every step, records the session on camera: visible cursor, typed input, paced actions, intro and outro cards
+5. **Edit** — cuts the agent's thinking time, zooms in on each action, adds captions, optional voice-over and music
+6. **Report** — outputs machine-readable `report.json` + human-readable `logs.txt`, with `demo.mp4` and `flow.md` as the shareable highlights
 
 ## Quick Start
 
@@ -75,6 +76,9 @@ runsight ./my-project --llm-provider=openai --model=gpt-4o-mini
 
 # Crawl every reachable page instead of the focused demo story
 runsight ./my-project --coverage=full
+
+# Narrated demo with background music (voice-over needs OPENAI_API_KEY)
+runsight ./my-project --voice --music ./track.mp3
 
 # Skip video, limit to 10 steps; show the browser window
 runsight ./my-project --no-video --max-steps=10 --no-headless
@@ -104,7 +108,9 @@ const result = await runSight({
   mode: 'llm',           // 'llm' | 'heuristic' (prompts if omitted)
   llmProvider: 'openai', // 'openai' | 'anthropic'
   model: 'gpt-4o-mini',  // model id (prompts if omitted in llm mode)
-  coverage: 'happy'      // 'happy' (demo story) | 'full' (crawl)
+  coverage: 'happy',     // 'happy' (demo story) | 'full' (crawl)
+  voice: true,           // spoken narration (needs OPENAI_API_KEY)
+  music: './track.mp3'   // optional background music
 });
 
 console.log(result.screenshots); // ['outputs/screenshots/step-1-initial.png', ...]
@@ -144,6 +150,8 @@ const result = await runSight({ projectPath: '/path/to/project', maxSteps: 5 });
 | `--llm-provider <p>` | | LLM provider: `openai` or `anthropic` (implies `--mode=llm`) |
 | `--model <id>` | _(prompts)_ | Model id, e.g. `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-20250514` |
 | `--coverage <c>` | `happy` | `happy` = focused demo story; `full` = crawl every page |
+| `--voice` / `--no-voice` | on in llm mode with `OPENAI_API_KEY` | Spoken narration via OpenAI text-to-speech (narration text is sent to OpenAI) |
+| `--music <file>` | | Background music mixed under the demo |
 
 ## Output
 
@@ -157,7 +165,7 @@ outputs/
     ...
   videos/
     session.webm     (raw recording)
-    demo.mp4         (edited demo with captions, if FFmpeg available)
+    demo.mp4         (edited 1080p demo: cuts, zoom, captions, voice-over — if FFmpeg available)
   flow.md            (human-readable walkthrough)
   logs.txt           (human-readable)
   report.json        (machine-readable)
@@ -218,7 +226,13 @@ it takes priority; the auto-detected context is still included as background.
 ## Skip these
 - Volume slider (range input) — not useful for exploration
 - Canvas element — game renders here, no clicks needed
+
+## Demo data
+- email: demo@yourapp.com
+- password: a-demo-account-password
 ```
+
+Forms are filled with a realistic demo persona by default. Values under `## Demo data` (matched against each field's name, label or placeholder) take priority — use a throwaway demo account to get past a login screen.
 
 The agent reads this file and includes it in every LLM decision, so it knows which buttons matter and what order to click them.
 
@@ -240,7 +254,7 @@ RunSight is not a testing tool. It's the fastest path from code to proof.
 
 | Phase | What changes |
 |-------|-------------|
-| **Now (v1.2.0)** | One command → auto-edited demo video with captions, flow summary, screenshots, report |
+| **Now (v1.2.0)** | One command → directed, auto-edited demo video (cursor, zoom, cuts, captions, voice-over), flow summary, screenshots, report |
 | **Soon (v2.0.0)** | `runsight.dev/demo/abc123` — shareable demo links |
 | **Future (v3.0.0)** | `git push` → demo auto-generated in CI |
 
@@ -256,7 +270,8 @@ See the full [Roadmap](docs/ROADMAP.md).
 - Single-page apps with client-side routing may not be fully explored
 - LLM-guided mode requires API keys and incurs costs (use a cheap model like `gpt-4o-mini` to keep it low)
 - Demo video editing requires FFmpeg — bundled with install; falls back to the raw WebM recording if unavailable
-- No authentication flow support (login forms get dummy data)
+- Login needs credentials you provide (`## Demo data` in `.runsight`); sign-up forms are filled with a demo persona
+- Voice-over requires an OpenAI key; without one the demo has captions only. No music is bundled — pass your own with `--music`
 - Port detection relies on stdout patterns — custom servers may need manual URL
 
 ## Documentation
