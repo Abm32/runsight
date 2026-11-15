@@ -16,6 +16,8 @@ RunSight is a modular autonomous agent that detects, runs, and explores web proj
 ```mermaid
 graph TD
     CLI["cli.js (yargs)"] --> API["index.js (runSight API)"]
+    CLI --> MCP["mcp.js (MCP server)"]
+    MCP --> API
     API --> DET["agent/detector.js"]
     API --> RUN["agent/runner.js"]
     API --> EXP["agent/explorer.js"]
@@ -42,6 +44,7 @@ graph TD
 |--------|------|----------------|
 | CLI | `cli.js` | Parse arguments, invoke API |
 | API | `index.js` | Orchestrate full pipeline |
+| MCP server | `mcp.js` | `runsight mcp`: JSON-RPC over stdio for Claude / Cursor / Codex. Bridges the `decide` hook to tool calls (`start_demo` → `act` → `finish_demo`) so the connected agent directs the demo. No SDK dependency. Self-check: `node mcp.js`. |
 | Detector | `agent/detector.js` | Identify project types (Node.js/Python/static), detect frameworks, return run commands. Supports monorepo scanning. |
 | Runner | `agent/runner.js` | Install deps via spawn, start dev servers, detect ports from stdout, manage process lifecycle. Includes killAll() and identifyFrontend(). |
 | Explorer | `agent/explorer.js` | 3-tier exploration loop: heuristic discovery → priority scoring → LLM guidance. Dialog handling, error capture, stop conditions, summary generation. |
@@ -114,6 +117,12 @@ These modules don't exist yet but represent the architectural direction:
 - **Speed**: Heuristic + priority runs in milliseconds; LLM adds 1-3s per step
 - **Reliability**: LLM APIs can fail; heuristic/priority always work
 - **Offline**: Works without API keys in heuristic+priority mode
+
+### Who decides the next action?
+Four interchangeable directors sit behind one step loop (`explorer.js` → `pageAnalyzer.js`):
+heuristic scoring, a hosted LLM (OpenAI / Anthropic), any OpenAI-compatible endpoint (`--base-url`),
+or an external `decide` callback — which is how the MCP server lets the connected agent's own model drive.
+The time a director spends thinking is always cut from the video, so a slow director costs nothing on screen.
 
 ### Why CommonJS over ESM?
 - Maximum compatibility with existing Node.js tooling

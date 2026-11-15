@@ -77,6 +77,9 @@ runsight ./my-project --llm-provider=openai --model=gpt-4o-mini
 # Crawl every reachable page instead of the focused demo story
 runsight ./my-project --coverage=full
 
+# Your own model — any OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, Groq, vLLM…)
+runsight ./my-project --base-url=http://localhost:11434/v1 --model=llava
+
 # Narrated demo with background music (voice-over needs OPENAI_API_KEY)
 runsight ./my-project --voice --music ./track.mp3
 
@@ -113,11 +116,72 @@ const result = await runSight({
   music: './track.mp3'   // optional background music
 });
 
+// Bring your own brain: decide each action yourself (any model, any logic, no API key)
+await runSight({
+  projectPath: './my-project',
+  decide: async ({ url, elements, screenshot, history, suggestedIndex }) => {
+    // elements: [{ index, tag, label, type, href, used }], screenshot: JPEG Buffer
+    if (history.length >= 6) return { done: true };
+    return { index: suggestedIndex, caption: 'Next step', narration: 'Here is the next step.' };
+  }
+});
+
 console.log(result.screenshots); // ['outputs/screenshots/step-1-initial.png', ...]
 console.log(result.video);       // 'outputs/videos/demo.mp4'
 console.log(result.report);      // 'outputs/report.json'
 console.log(result.summary);     // 'Clicked Login → navigated to /dashboard → ...'
 ```
+
+## Use Any Model
+
+RunSight is not tied to one provider. Pick whichever fits:
+
+| You have… | Use |
+|-----------|-----|
+| Nothing (free, offline) | `--mode=heuristic` |
+| An OpenAI or Anthropic key | `--llm-provider=openai\|anthropic --model=<any model id>` |
+| A local or self-hosted model (Ollama, LM Studio, vLLM, llama.cpp) | `--base-url=http://localhost:11434/v1 --model=<id>` — no key needed |
+| Another hosted provider with an OpenAI-compatible API (OpenRouter, Groq, Together, Gemini…) | `--base-url=<their endpoint> --model=<id>` with `OPENAI_API_KEY=<their key>` |
+| Claude Code, Cursor, Codex or any MCP client | `runsight mcp` — the agent you are already talking to directs the demo, no key |
+| Your own code | `runSight({ decide })` — a callback picks each action |
+
+The model must accept image input (RunSight sends page screenshots). With `--base-url`, requests — including
+whatever is in `OPENAI_API_KEY` — go to that endpoint instead of OpenAI, and voice-over is off unless you pass `--voice`.
+
+## Use From Claude, Cursor, Codex (MCP)
+
+`runsight mcp` runs RunSight as an MCP server over stdio. The connected agent sees each page (screenshot +
+numbered elements), chooses every action, and writes the captions and narration — its model is the brain,
+so no API key is involved.
+
+```bash
+# Claude Code
+claude mcp add runsight -- npx -y runsight mcp
+```
+
+```jsonc
+// Cursor (.cursor/mcp.json), Claude Desktop (claude_desktop_config.json), and most other clients
+{ "mcpServers": { "runsight": { "command": "npx", "args": ["-y", "runsight", "mcp"] } } }
+```
+
+```toml
+# Codex (~/.codex/config.toml)
+[mcp_servers.runsight]
+command = "npx"
+args = ["-y", "runsight", "mcp"]
+```
+
+Then ask: *"Record a demo of this project with runsight."*
+
+| Tool | What it does |
+|------|--------------|
+| `start_demo` | Starts the app and a recorded browser; returns the first page |
+| `act` | Performs one action (`index`, optional `value`, `caption`, `narration`); returns the next page |
+| `finish_demo` | Adds the outro, edits the video, returns output paths |
+| `record_demo` | Fully automatic run (heuristic, or an LLM configured in the server's environment) |
+
+**As a Claude skill:** copy `skills/runsight/` from this package into `~/.claude/skills/` (or your project's
+`.claude/skills/`). It teaches Claude when and how to record a demo, with or without the MCP server.
 
 ## Agent Skill Integration
 
@@ -149,6 +213,8 @@ const result = await runSight({ projectPath: '/path/to/project', maxSteps: 5 });
 | `--mode <m>` | _(prompts)_ | `llm` (best understanding, needs API key) or `heuristic` (free, offline) |
 | `--llm-provider <p>` | | LLM provider: `openai` or `anthropic` (implies `--mode=llm`) |
 | `--model <id>` | _(prompts)_ | Model id, e.g. `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-20250514` |
+| `--base-url <url>` | | OpenAI-compatible endpoint for your own model (needs `--model`) |
+| `mcp` | | `runsight mcp` — run as an MCP server (stdio) |
 | `--coverage <c>` | `happy` | `happy` = focused demo story; `full` = crawl every page |
 | `--voice` / `--no-voice` | on in llm mode with `OPENAI_API_KEY` | Spoken narration via OpenAI text-to-speech (narration text is sent to OpenAI) |
 | `--music <file>` | | Background music mixed under the demo |

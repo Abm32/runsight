@@ -37,6 +37,12 @@ const result = await runSight({
 | `coverage` | `'happy'\|'full'` | `'happy'` | `happy` = focused demo story; `full` = breadth-first crawl |
 | `voice` | `boolean` | on in `llm` mode when `OPENAI_API_KEY` is set | Spoken narration via OpenAI text-to-speech. Needs `OPENAI_API_KEY`; skipped with a log line if unavailable |
 | `music` | `string\|null` | `null` | Path to a background music file mixed under the demo |
+| `baseUrl` | `string\|null` | `null` | OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, Groq…). Requires `model`; sets `OPENAI_BASE_URL` (or `ANTHROPIC_BASE_URL` with `llmProvider: 'anthropic'`) for the run and a placeholder key if none is set |
+| `decide` | `function\|null` | `null` | `async (observation) => decision`. External director: called before every action instead of the LLM/heuristic choice. Forces heuristic mode (no LLM calls) and raises the global timeout to 30 min |
+
+**`decide` observation:** `{ url, step, maxSteps, history: string[], lastError: string|null, guide: string|null, screenshot: Buffer (viewport JPEG), screenshotPath: string (full-page PNG), suggestedIndex: number, elements: [{ index, tag, label, type, href, used }] }`
+
+**`decide` decision:** `{ index, value?, caption?, narration?, reason?, pageSummary? }` to act on `elements[index]`, or `{ done: true }` to end the demo. An invalid index fails the step; the next observation carries the message in `lastError`.
 
 > **API keys:** In `llm` mode, the provider's key is read from the environment
 > (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`). If absent and running interactively,
@@ -105,6 +111,19 @@ Scores and sorts elements by exploration priority.
 ### `getNextAction(screenshot, elements, history, provider)` — `strategies/llmStrategy.js`
 Asks an LLM to choose the next action based on a screenshot.
 
+## MCP Server — `mcp.js`
+
+`runsight mcp` serves JSON-RPC 2.0 over newline-delimited stdio (MCP tools capability only). Progress output goes to stderr.
+
+| Tool | Arguments | Result |
+|------|-----------|--------|
+| `start_demo` | `projectPath` (required), `maxSteps`, `video`, `voice` | First observation: viewport JPEG + numbered elements |
+| `act` | `index` (required), `value`, `caption`, `narration` | Next observation, or the final result if the step budget ran out |
+| `finish_demo` | — | Output paths (video, walkthrough, report) and summary |
+| `record_demo` | `projectPath` (required), `maxSteps`, `video`, `mode`, `model`, `baseUrl` | Output paths and summary |
+
+One demo runs at a time. `serve()`, `handle(message)` and `callTool(name, args)` are exported. Self-check: `node mcp.js`.
+
 ## CLI
 
 ```bash
@@ -123,3 +142,5 @@ runsight [projectPath] [options]
 | `--coverage <c>` | `happy` (demo story, default) or `full` (crawl every page) |
 | `--voice` / `--no-voice` | Spoken narration (OpenAI TTS). Default: on in llm mode when `OPENAI_API_KEY` is set |
 | `--music <file>` | Background music mixed under the demo |
+| `--base-url <url>` | OpenAI-compatible endpoint for your own model (needs `--model`) |
+| `mcp` (subcommand) | Run as an MCP server over stdio |

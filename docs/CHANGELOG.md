@@ -5,6 +5,18 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - Unreleased
+
+### Added
+- **MCP server** (`mcp.js`, `runsight mcp`) — use RunSight from Claude Code, Claude Desktop, Cursor, Codex or any MCP client. With `start_demo` → `act` → `finish_demo` the connected agent sees each page and directs the demo itself, so no API key is needed; `record_demo` runs fully automatically
+- **Bring your own model** — `--base-url` / `baseUrl` points RunSight at any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, Groq, Together, Gemini…). No API key required for local servers
+- **`decide` hook** (`runSight({ decide })`) — a callback that picks every action, for custom models or scripted demos
+- **Claude skill** (`skills/runsight/SKILL.md`) — teaches Claude when and how to record a demo, with or without the MCP server
+
+### Changed
+- Voice-over is no longer on by default when `--base-url` is set (narration would be sent to that endpoint)
+- Runs directed through `decide` / MCP have a 30-minute global timeout instead of 5
+
 ## [1.2.0] - 2026-11-15
 
 ### Added
