@@ -29,7 +29,9 @@ async function findInteractableElements(page) {
       return {
         index: i,
         tagName: el.tagName.toLowerCase(),
-        text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 100),
+        // Visible label: own text, then (for form fields) the <label>, aria-label, placeholder, value.
+        text: (el.innerText || (el.labels && el.labels[0] && el.labels[0].innerText) || el.getAttribute('aria-label')
+          || el.getAttribute('placeholder') || el.value || '').trim().split('\n')[0].slice(0, 100),
         type: el.getAttribute('type') || '',
         href: el.getAttribute('href') || null,
         inputType: el.tagName === 'INPUT' ? (el.getAttribute('type') || 'text') : null,
@@ -49,11 +51,12 @@ async function findInteractableElements(page) {
     && !SKIP_INPUT_TYPES.includes(el.inputType)
   );
 
-  // Deduplicate by text + href + tagName
+  // Deduplicate by text + href + tagName (+ field name/type, so unlabeled
+  // form fields are not collapsed into one)
   const seen = new Set();
   const unique = [];
   for (const el of filtered) {
-    const key = `${el.tagName}|${el.text}|${el.href || ''}`;
+    const key = `${el.tagName}|${el.text}|${el.href || ''}|${el.name}|${el.inputType || ''}`;
     if (!seen.has(key)) {
       seen.add(key);
       el.selector = buildSelector(el);
@@ -66,9 +69,11 @@ async function findInteractableElements(page) {
 
 function buildSelector(el) {
   if (el.href && el.tagName === 'a') return `a[href="${el.href}"]`;
-  if (el.tagName === 'input' && el.inputType && el.name) return `input[type="${el.inputType}"][name="${el.name}"]`;
+  // `el.type` is the raw attribute: an <input> with no type attribute is a text
+  // field, but `[type="text"]` would not match it.
+  if (el.tagName === 'input' && el.type && el.name) return `input[type="${el.type}"][name="${el.name}"]`;
   if (el.tagName === 'input' && el.name) return `input[name="${el.name}"]`;
-  if (el.tagName === 'input' && el.inputType) return `input[type="${el.inputType}"]`;
+  if (el.tagName === 'input' && el.type) return `input[type="${el.type}"]`;
   if (el.name) return `${el.tagName}[name="${el.name}"]`;
   if (el.text && el.tagName !== 'input') return `${el.tagName}:has-text("${el.text.slice(0, 50)}")`;
   return `${el.tagName}:nth-of-type(${el.index + 1})`;
