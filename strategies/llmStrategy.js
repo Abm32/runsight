@@ -43,6 +43,9 @@ Respond with ONLY valid JSON of this exact shape:
   "done": <true only if the demo story is complete and nothing valuable is left to show>
 }`;
 
+/** Set when the provider rejects our credentials or quota; skips further calls this run. */
+let llmUnavailable = false;
+
 /**
  * Validate LLM configuration. Throws if API key is missing.
  * @param {string} provider - 'openai' or 'anthropic'
@@ -83,6 +86,7 @@ function modelFor(provider, model) {
  * @returns {Promise<{pageSummary: string, plan: string[], elements: Array, recommendedIndex: number, recommendedReason: string, inputValue: string, demoCaption: string, narration: string, done: boolean}|null>}
  */
 async function analyzePage(screenshotBuffer, elements, history, provider, opts = {}) {
+  if (llmUnavailable) return null;
   const elementList = elements.map((el, i) =>
     `[${i}] ${el.tagName} "${el.text || el.name || el.href || ''}" (${el.inputType || el.type || 'clickable'})${el.inNav ? ' [nav]' : ''}`
   ).join('\n');
@@ -109,6 +113,12 @@ async function analyzePage(screenshotBuffer, elements, history, provider, opts =
     return parseAnalysis(raw, elements.length);
   } catch (err) {
     console.error(`  ⚠️  LLM analyze error (${provider}/${model}): ${err.message}`);
+    // Bad key / no credits / rate limit (already retried by the SDK) will not
+    // fix itself mid-run — stop asking instead of stalling every step.
+    if ([401, 403, 429].includes(err.status)) {
+      llmUnavailable = true;
+      console.error('  ⚠️  LLM unavailable — continuing this run with heuristic exploration');
+    }
     return null;
   }
 }
