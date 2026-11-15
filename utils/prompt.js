@@ -12,7 +12,8 @@ const { PROVIDERS, listAllModels, DEFAULT_MODEL } = require('../config/models');
  *  - Key input is masked (not echoed to the terminal, not stored in shell history).
  *  - If a provider's env var is already set, we use it and never prompt.
  *  - Keys are only ever sent to the official OpenAI / Anthropic API endpoints
- *    via their official SDKs.
+ *    via their official SDKs — unless the user points RunSight at their own
+ *    endpoint with --base-url, in which case requests go there instead.
  */
 
 /** Whether we have an interactive TTY to prompt on. */

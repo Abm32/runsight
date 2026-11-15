@@ -16,6 +16,7 @@ const { resolveExplorationConfig } = require('./utils/prompt');
 const { installCursor, showCard, holdMs } = require('./agent/director');
 
 const GLOBAL_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const DIRECTED_TIMEOUT = 30 * 60 * 1000; // an external director thinks between steps
 
 /**
  * RunSight — Autonomous project explorer + demo recorder.
@@ -30,14 +31,28 @@ const GLOBAL_TIMEOUT = 5 * 60 * 1000; // 5 minutes
  * @param {'happy'|'full'} [options.coverage='happy'] - Demo story vs full crawl
  * @param {boolean} [options.voice] - Spoken narration (OpenAI TTS). Defaults to on in llm mode when OPENAI_API_KEY is set
  * @param {string|null} [options.music] - Path to a background music file to mix under the demo
+ * @param {string|null} [options.baseUrl] - OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, Groq, vLLM…). Requires `model`
+ * @param {(observation: Object) => Promise<Object>} [options.decide] - Bring your own brain: called on every
+ *   page with `{url, step, maxSteps, history, lastError, guide, screenshot, screenshotPath, suggestedIndex, elements}`;
+ *   return `{index, value?, caption?, narration?, reason?, pageSummary?}` or `{done: true}`. No API key needed
  * @returns {Promise<{screenshots: string[], video: string|null, flow: string|null, report: string, summary: string}>}
  */
 async function runSight(options = {}) {
   // Resolve mode/provider/model interactively when not fully specified.
   // Handles secure, in-memory-only API key collection.
+  const decide = typeof options.decide === 'function' ? options.decide : null;
+  let llmProvider = options.llmProvider || null;
+  if (options.baseUrl && !decide) {
+    if (!options.model) throw new Error('--base-url needs --model (the model id your endpoint serves)');
+    llmProvider = llmProvider || 'openai';
+    const prefix = llmProvider === 'anthropic' ? 'ANTHROPIC' : 'OPENAI';
+    process.env[`${prefix}_BASE_URL`] = options.baseUrl; // read by the official SDKs
+    // Local servers ignore the key, but the SDK refuses to start without one.
+    if (!process.env[`${prefix}_API_KEY`]) process.env[`${prefix}_API_KEY`] = 'not-needed';
+  }
   const cfg = await resolveExplorationConfig({
-    mode: options.mode || null,
-    llmProvider: options.llmProvider || null,
+    mode: decide ? 'heuristic' : (options.mode || (options.baseUrl ? 'llm' : null)),
+    llmProvider,
     model: options.model || null
   });
 
@@ -50,13 +65,14 @@ async function runSight(options = {}) {
     llmProvider: cfg.llmProvider,
     model: cfg.model,
     coverage: options.coverage === 'full' ? 'full' : 'happy',
-    music: options.music ? path.resolve(options.music) : null
+    music: options.music ? path.resolve(options.music) : null,
+    decide
   };
   // Narration is sent to OpenAI and billed, so it is only on by default when
   // the user already chose LLM mode; `voice: true` opts in from heuristic mode.
   opts.voice = opts.video && (typeof options.voice === 'boolean'
     ? options.voice
-    : opts.mode === 'llm' && Boolean(process.env.OPENAI_API_KEY));
+    : opts.mode === 'llm' && !options.baseUrl && Boolean(process.env.OPENAI_API_KEY));
 
   // Validate LLM config upfront (key should already be in env via resolve step).
   if (opts.mode === 'llm' && opts.llmProvider) validateLLMConfig(opts.llmProvider);
@@ -70,13 +86,14 @@ async function runSight(options = {}) {
 
   try {
     const timeoutPromise = new Promise((_, reject) => {
-      globalTimer = setTimeout(() => reject(new Error('Global timeout exceeded (5 min)')), GLOBAL_TIMEOUT);
+      const limit = decide ? DIRECTED_TIMEOUT : GLOBAL_TIMEOUT;
+      globalTimer = setTimeout(() => reject(new Error(`Global timeout exceeded (${limit / 60000} min)`)), limit);
     });
 
     const pipeline = async () => {
       console.log('🔍 RunSight v1.2.0');
       console.log(`📁 Project: ${opts.projectPath}`);
-      console.log(`🧭 Mode: ${opts.mode}${opts.model ? ' (' + opts.model + ')' : ''} · Coverage: ${opts.coverage}`);
+      console.log(`🧭 Mode: ${decide ? 'agent-directed' : opts.mode}${opts.model ? ' (' + opts.model + ')' : ''} · Coverage: ${opts.coverage}`);
 
       logger.info('Detecting project type...');
       const projects = await detectProjects(opts.projectPath);
