@@ -241,7 +241,7 @@ outputs/
 
 ```json
 {
-  "version": "1.3.0",
+  "version": "1.3.1",
   "projectPath": "/path/to/project",
   "startTime": "2026-04-29T06:50:14.957Z",
   "endTime": "2026-04-29T06:50:23.042Z",
@@ -320,7 +320,7 @@ RunSight is not a testing tool. It's the fastest path from code to proof.
 
 | Phase | What changes |
 |-------|-------------|
-| **Now (v1.3.0)** | Any model or your AI agent (MCP) → directed, auto-edited demo video (cursor, zoom, cuts, captions, voice-over), flow summary, screenshots, report |
+| **Now (v1.3.1)** | Any model or your AI agent (MCP) → directed, auto-edited demo video (cursor, zoom, cuts, captions, voice-over), flow summary, screenshots, report |
 | **Soon (v2.0.0)** | `runsight.dev/demo/abc123` — shareable demo links |
 | **Future (v3.0.0)** | `git push` → demo auto-generated in CI |
 
@@ -331,7 +331,7 @@ See the full [Roadmap](docs/ROADMAP.md).
 - Node.js 18+
 - Playwright (auto-installed with `npm install`)
 
-## Limitations (v1.3.0)
+## Limitations (v1.3.1)
 
 - Single-page apps with client-side routing may not be fully explored
 - LLM-guided mode requires API keys and incurs costs (use a cheap model like `gpt-4o-mini` to keep it low)

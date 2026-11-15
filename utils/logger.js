@@ -76,7 +76,7 @@ class Logger {
 
     // report.json — machine-readable
     const report = {
-      version: '1.3.0',
+      version: '1.3.1',
       projectPath: this.projectPath,
       startTime: this.startTime.toISOString(),
       endTime: endTime.toISOString(),

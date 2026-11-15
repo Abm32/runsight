@@ -1,6 +1,6 @@
 {
   "name": "runsight",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Your project demos itself. One command — your app is explored, recorded, and ready to share.",
   "main": "index.js",
   "bin": {

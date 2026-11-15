@@ -5,7 +5,7 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - Unreleased
+## [1.3.1] - 2026-11-15
 
 ### Fixed
 - **Video out of sync on animated pages** — captions, zooms and cuts drifted by seconds on apps with continuous animation, because Playwright's recorder plays such pages slower than real time. `agent/recorder.js` now captures the screencast itself and stamps frames with the wall clock (raw file is `session.mkv`); Playwright's recorder remains the fallback without FFmpeg
