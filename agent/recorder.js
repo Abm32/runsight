@@ -19,12 +19,16 @@ class Recorder {
    * @returns {Promise<import('playwright').BrowserContext>}
    */
   async createContext(browser, opts = {}) {
+    // A laptop-sized 1280x720 layout rendered at 1.5x = crisp Full HD frames
+    // with comfortably large UI. Needs Recorder.LAUNCH_ARGS on the browser:
+    // the recorder ignores a context-only deviceScaleFactor.
     return browser.newContext({
       recordVideo: {
         dir: this.tmpDir,
-        size: { width: 1280, height: 720 }
+        size: { width: 1920, height: 1080 }
       },
-      viewport: { width: 1280, height: 720 }
+      viewport: { width: 1280, height: 720 },
+      deviceScaleFactor: 1.5
     });
   }
 
@@ -60,5 +64,8 @@ class Recorder {
     return options.video !== false;
   }
 }
+
+/** Chromium flags required for the recording to capture at 1.5x device scale. */
+Recorder.LAUNCH_ARGS = ['--force-device-scale-factor=1.5'];
 
 module.exports = { Recorder };
