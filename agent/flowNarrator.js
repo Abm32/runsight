@@ -4,12 +4,14 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Build a human-readable narrative and a caption timeline from exploration data.
+ * Build a human-readable narrative plus the edit timeline (captions and zoom
+ * targets, in raw recording time) from exploration data.
  *
  * @param {{steps: Array, summary: string, pages: Array}} result - from explore()
  * @param {Object} opts - run options (mode, model, coverage)
  * @returns {{
- *   captions: Array<{ tMs: number, text: string, durationMs: number }>,
+ *   captions: Array<{ tMs: number, text: string, narration: string, durationMs: number }>,
+ *   zooms: Array<{ startMs: number, endMs: number, x: number, y: number }>,
  *   markdown: string,
  *   write: (outputDir: string) => string
  * }}
@@ -18,18 +20,27 @@ function buildNarrative(result, opts = {}) {
   const steps = result.steps || [];
   const pages = result.pages || [];
 
-  // Caption timeline: one caption per meaningful action, aligned to video time.
+  // Caption timeline: one caption per meaningful action, starting when the
+  // cursor sets off (not after the action lands) so text and motion line up.
   const actionSteps = steps.filter(s => s.kind === 'action' || s.kind === 'key');
+  const startOf = (s, i) => (typeof s.tStartMs === 'number' ? s.tStartMs : (typeof s.tMs === 'number' ? s.tMs : i * 2000));
   const captions = actionSteps.map((s, i) => {
     const next = actionSteps[i + 1];
-    const start = typeof s.tMs === 'number' ? s.tMs : i * 2000;
-    const end = next && typeof next.tMs === 'number' ? next.tMs : start + 3000;
+    const start = startOf(s, i);
+    const end = next ? startOf(next, i + 1) : start + 3000;
     return {
       tMs: Math.max(0, start),
-      durationMs: Math.max(1200, end - start),
-      text: s.caption || s.action || 'Exploring'
+      durationMs: Math.max(1200, end - start - 150),
+      text: s.caption || s.action || 'Exploring',
+      narration: s.narration || ''
     };
   });
+
+  // Zoom in on each action from just after the cursor sets off until it
+  // lands, then release so the resulting page is seen in full.
+  const zooms = actionSteps
+    .filter(s => s.point && typeof s.tStartMs === 'number' && typeof s.tActedMs === 'number')
+    .map(s => ({ startMs: s.tStartMs + 100, endMs: s.tActedMs + 150, x: s.point.x, y: s.point.y }));
 
   // Human-readable narrative.
   const lines = [];
@@ -75,6 +86,7 @@ function buildNarrative(result, opts = {}) {
 
   return {
     captions,
+    zooms,
     markdown,
     write(outputDir) {
       const p = path.join(outputDir, 'flow.md');
