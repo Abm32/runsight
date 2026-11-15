@@ -2,7 +2,8 @@
 
 const { findInteractableElements, executeAction } = require('../strategies/heuristicStrategy');
 const { createVisitTracker } = require('../strategies/priorityStrategy');
-const { analyzeCurrentPage } = require('./pageAnalyzer');
+const { analyzeCurrentPage, describeAction } = require('./pageAnalyzer');
+const { pointAt, holdMs } = require('./director');
 
 /** Key name mapping for .runsight guide */
 const KEY_MAP = {
@@ -45,6 +46,11 @@ function parseKeyboardActions(guide) {
  *  - 'happy' (default): always take the single best action — a focused demo story.
  *  - 'full': breadth-first — exhaust each page's actions before moving on.
  *
+ * When `options.present` is set the run is performed "on camera": the cursor
+ * glides to each target, text is typed, and every action is held long enough
+ * to be read and narrated. Time spent thinking (screenshots, analysis, waiting
+ * for UI) is reported in `cuts` so the editor can remove it from the video.
+ *
  * @param {import('playwright').Page} page
  * @param {Object} options
  * @param {number} [options.maxSteps=15]
@@ -53,20 +59,34 @@ function parseKeyboardActions(guide) {
  * @param {string|null} [options.model]
  * @param {'happy'|'full'} [options.coverage='happy']
  * @param {string|null} [options.guide]
+ * @param {boolean} [options.present=false] - pace and animate actions for a recording
+ * @param {number} [options.videoT0] - epoch ms when the recording started (timeline origin)
  * @param {import('../utils/logger').Logger} logger
  * @param {import('./screenshotter').Screenshotter} screenshotter
- * @returns {Promise<{steps: Array, summary: string, pages: Array}>}
+ * @returns {Promise<{steps: Array, summary: string, pages: Array, cuts: Array<{startMs: number, endMs: number}>}>}
  */
 async function explore(page, options, logger, screenshotter) {
   const maxSteps = options.maxSteps || 15;
   const mode = options.mode || (options.llmProvider ? 'llm' : 'heuristic');
   const coverage = options.coverage === 'full' ? 'full' : 'happy';
+  const present = options.present === true;
   const tracker = createVisitTracker();
   const history = [];
   const steps = [];
   const pages = []; // page-level summaries for narration
+  let plan = [];    // demo story beats (LLM mode), carried from step to step
   let consecutiveErrors = 0;
-  const t0 = Date.now();
+  const t0 = options.videoT0 || Date.now();
+  const now = () => Date.now() - t0;
+
+  // Dead time (thinking / waiting) to cut from the video.
+  const cuts = [];
+  let cutStart = null;
+  const openCut = () => { if (cutStart === null) cutStart = now(); };
+  const closeCut = () => {
+    if (cutStart !== null && now() - cutStart > 250) cuts.push({ startMs: cutStart, endMs: now() });
+    cutStart = null;
+  };
 
   page.on('dialog', async (dialog) => {
     logger.info(`Dialog dismissed: ${dialog.message().slice(0, 100)}`);
@@ -77,9 +97,13 @@ async function explore(page, options, logger, screenshotter) {
   tracker.markVisited(page.url());
   let lastSummarizedUrl = null;
 
+  // Let the viewer take in the first page before anything happens.
+  if (present) await page.waitForTimeout(1800);
+
   for (let step = 1; step <= maxSteps; step++) {
     let chosen = null;
     try {
+      openCut();
       let ssPath = await screenshotter.capture(page, step, step === 1 ? 'initial' : 'step');
       logger.addScreenshot(step, ssPath);
 
@@ -104,12 +128,16 @@ async function explore(page, options, logger, screenshotter) {
       if (!fresh.length) {
         const keys = parseKeyboardActions(options.guide);
         if (keys.length) {
+          closeCut(); // gameplay is content, not dead time
           logger.info('Performing keyboard actions while waiting for UI...');
           for (let round = 0; round < 3; round++) {
             for (const key of keys) {
+              const tKey = now();
               await page.keyboard.press(key.key);
               logger.step(step, `Pressed ${key.key}`, key.description || '');
-              steps.push(makeStep(step, `Pressed ${key.key}`, key.description || '', null, t0, { kind: 'key' }));
+              steps.push(makeStep(step, `Pressed ${key.key}`, key.description || '', null, t0, {
+                kind: 'key', tStartMs: tKey, caption: key.description || `Pressing ${key.key}`
+              }));
               const curStep = step;
               step++;
               if (step > maxSteps) break;
@@ -123,6 +151,7 @@ async function explore(page, options, logger, screenshotter) {
             if (fresh.length || step > maxSteps) break;
             await page.waitForTimeout(1000);
           }
+          openCut();
         }
 
         if (!fresh.length && step <= maxSteps) {
@@ -143,8 +172,13 @@ async function explore(page, options, logger, screenshotter) {
       // UNDERSTAND THE PAGE: read every element, predict destinations, rank, summarize.
       const analysis = await analyzeCurrentPage(page, fresh, {
         mode, llmProvider: options.llmProvider || null, model: options.model || null,
-        guide: options.guide || null, history, screenshotPath: ssPath
+        guide: options.guide || null, history, screenshotPath: ssPath,
+        step, maxSteps, plan, isVisited: (url) => tracker.hasVisited(url)
       });
+      if (analysis.plan.length) {
+        if (!plan.length) logger.info(`Demo plan: ${analysis.plan.join(' → ')}`);
+        plan = analysis.plan;
+      }
 
       // Record a page-level summary once per distinct page.
       const curUrl = page.url();
@@ -162,6 +196,12 @@ async function explore(page, options, logger, screenshotter) {
         logger.info(`Page: ${analysis.pageSummary} (${analysis.source})`);
       }
 
+      // The director decided the story is told — end on this page.
+      if (analysis.done && coverage !== 'full' && history.length >= 2) {
+        logger.info('Demo story complete — stopping');
+        break;
+      }
+
       // CHOOSE the action(s) for this page based on coverage mode.
       const actionPlan = coverage === 'full'
         ? analysis.ranked.map(r => r.element)   // breadth-first: try all, ranked
@@ -170,14 +210,22 @@ async function explore(page, options, logger, screenshotter) {
       for (const target of actionPlan) {
         if (step > maxSteps) break;
         chosen = target;
+        const isRecommended = target === analysis.recommended;
         const ranking = analysis.ranked.find(r => r.element === target);
-        const caption = (target === analysis.recommended)
-          ? analysis.caption
-          : `Clicking "${ranking ? ranking.label : 'element'}"`;
+        const said = isRecommended ? analysis : describeAction(target, step);
         const predictedDestination = ranking ? ranking.predictedDestination : '';
 
+        // ON CAMERA from here: point, act, then hold so the viewer can follow.
+        closeCut();
+        const tStart = now();
         const prevUrl = page.url();
-        const actionDesc = await executeAction(page, chosen);
+        const point = present ? await pointAt(page, page.locator(chosen.selector).first()) : null;
+        const actionDesc = await executeAction(page, chosen, {
+          value: isRecommended ? analysis.inputValue : '',
+          typeDelay: present ? 45 : 0,
+          guide: options.guide || null
+        });
+        const tActed = now();
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
         // Wait for the URL to settle — some static servers redirect to clean URLs
         // (e.g. /page.html → /page) slightly after networkidle.
@@ -198,15 +246,25 @@ async function explore(page, options, logger, screenshotter) {
         const navigated = newUrl !== prevUrl;
         if (navigated) tracker.markVisited(newUrl);
 
-        const reason = (target === analysis.recommended) ? analysis.recommendedReason : (ranking ? `priority ${ranking.priority}` : '');
+        // Hold on the result long enough to read the caption / hear the narration.
+        if (present) {
+          const remaining = holdMs(said.narration || said.caption) - (now() - tStart);
+          await page.waitForTimeout(Math.max(navigated ? 1200 : 700, remaining));
+        }
+
+        const reason = isRecommended ? analysis.recommendedReason : (ranking ? `priority ${ranking.priority}` : '');
         const detail = `${reason}${navigated ? ' → navigated to ' + safePath(newUrl) : ''}`;
         logger.step(step, actionDesc, detail);
         logger.addScreenshot(step, ssPath); // attach now that the step entry exists
         tracker.markClicked(tracker.elementKey(chosen));
         history.push(actionDesc);
+        const viewport = page.viewportSize();
         steps.push(makeStep(step, actionDesc, detail, null, t0, {
-          kind: 'action', caption, predictedDestination, navigated,
-          fromUrl: safePath(prevUrl), toUrl: safePath(newUrl), reason
+          kind: 'action', caption: said.caption, narration: said.narration, predictedDestination, navigated,
+          fromUrl: safePath(prevUrl), toUrl: safePath(newUrl), reason,
+          tStartMs: tStart, tActedMs: tActed,
+          // Where the action happened, as a fraction of the viewport — drives the zoom.
+          point: point && viewport ? { x: point.x / viewport.width, y: point.y / viewport.height } : null
         }));
         // attach screenshot captured at the top of this step to the first action
         if (steps.length) steps[steps.length - 1].screenshot = ssPath;
@@ -228,9 +286,10 @@ async function explore(page, options, logger, screenshotter) {
       if (consecutiveErrors >= 3) { logger.info('Too many consecutive errors — stopping'); break; }
     }
   }
+  closeCut(); // the final look-around that found nothing more to do
 
   const summary = history.length ? history.join(' → ') : 'No actions taken';
-  return { steps, summary, pages };
+  return { steps, summary, pages, cuts };
 }
 
 /** Build a rich step record for narration/video. */
