@@ -91,7 +91,7 @@ async function runSight(options = {}) {
     });
 
     const pipeline = async () => {
-      console.log('🔍 RunSight v1.3.1');
+      console.log('🔍 RunSight v1.3.2');
       console.log(`📁 Project: ${opts.projectPath}`);
       console.log(`🧭 Mode: ${decide ? 'agent-directed' : opts.mode}${opts.model ? ' (' + opts.model + ')' : ''} · Coverage: ${opts.coverage}`);
 

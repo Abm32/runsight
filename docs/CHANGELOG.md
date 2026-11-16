@@ -5,7 +5,7 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - Unreleased
+## [1.3.2] - 2026-11-16
 
 ### Changed
 - **Smooth cursor** — the cursor is no longer recorded with the page (capped at 25 fps). The explorer logs each cursor move and the editor draws the arrow at 50 fps, so motion is smooth regardless of how fast the browser delivers frames. `demo.mp4` is now 50 fps
