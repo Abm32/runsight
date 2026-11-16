@@ -35,7 +35,9 @@ function escapeDrawText(text) {
     .slice(0, 80);
 }
 
-const FPS = 25;
+const FPS = 50;          // output rate: the page is captured at 25 fps, the cursor is drawn at 50
+const CURSOR_PNG = path.join(__dirname, 'cursor.png'); // 110px arrow for the 2x canvas
+const CURSOR_HOTSPOT = { x: 21, y: 18 };               // arrow tip inside that image
 const ZOOM = 0.3;        // extra magnification while an action is in focus (1 + ZOOM)
 const ZOOM_RAMP = 0.55;  // seconds to ease in / out
 const sec = (ms) => Number((ms / 1000).toFixed(3));
@@ -136,8 +138,32 @@ function keyExpr(keys, field, T) {
 }
 
 /**
+ * FFmpeg expression for the cursor position along one axis, in canvas pixels.
+ * Each move follows a quadratic bezier arc with smoothstep easing (the motion
+ * recipe from farzaa/clicky, MIT); between moves the cursor rests.
+ * @param {Array<{start: number, dur: number, from: Object, control: Object, to: Object}>} moves - seconds, edited time; points as viewport fractions
+ * @param {'x'|'y'} axis
+ * @param {number} size - canvas size along that axis, px
+ * @param {number} hotspot - offset of the arrow tip inside the cursor image, px
+ * @returns {string}
+ */
+function cursorExpr(moves, axis, size, hotspot) {
+  const px = (p) => Number((p[axis] * size - hotspot).toFixed(1));
+  let expr = `${px(moves[moves.length - 1].to)}`;
+  for (let i = moves.length - 1; i >= 0; i--) {
+    const m = moves[i];
+    const u = `((t-${m.start})/${m.dur})`;
+    const e = `(${u}*${u}*(3-2*${u}))`;
+    const arc = `((1-${e})*(1-${e})*${px(m.from)}+2*(1-${e})*${e}*${px(m.control)}+${e}*${e}*${px(m.to)})`;
+    expr = `if(lt(t,${m.start}),${px(m.from)},if(lt(t,${Number((m.start + m.dur).toFixed(3))}),${arc},${expr}))`;
+  }
+  return expr;
+}
+
+/**
  * Build the FFmpeg filter graph for the edit. Pure — no I/O.
- * Input 0 is the recording; inputs 1..N are voice clips; then optional music.
+ * Input 0 is the recording; inputs 1..N are voice clips; then optional music;
+ * then the cursor image when `tl.cursor` has moves.
  * @param {Object} tl
  * @param {Array<{tMs: number, durationMs: number, text: string}>} [tl.captions]
  * @param {Array<{startMs: number, endMs: number}>} [tl.cuts]
@@ -147,7 +173,9 @@ function keyExpr(keys, field, T) {
  * @param {number} [tl.durationMs] - wall-clock length of the run, on the same clock as the times above
  * @param {number} [tl.videoDurationMs] - actual length of the recording file
  * @param {Array<{startMs: number, endMs: number}>} [tl.stills] - other spans where the screen was static (title cards)
- * @returns {{graph: string, hasAudio: boolean, durationSec: number|null}}
+ * @param {Array<{tMs: number, durationMs: number, from: Object, control: Object, to: Object}>} [tl.cursor] - cursor moves to draw
+ * @param {{startMs: number, endMs: number}} [tl.cursorWindow] - when the cursor is visible (not on title cards)
+ * @returns {{graph: string, hasAudio: boolean, durationSec: number|null, cursorInput: number}} cursorInput: input index of the cursor image, or -1
  */
 function buildFilterGraph(tl) {
   // Playwright's recorder writes at least one video frame per screen update, so
@@ -175,16 +203,38 @@ function buildFilterGraph(tl) {
     .map(z => ({ start: at(z.startMs), end: at(z.endMs), x: z.x, y: z.y }))
     .filter(z => z.end > z.start)
     .sort((a, b) => a.start - b.start);
+  const moves = (tl.cursor || [])
+    .map(m => ({ ...m, start: at(m.tMs), dur: Math.max(0.05, Number((at(m.tMs + m.durationMs) - at(m.tMs)).toFixed(3))) }))
+    .sort((a, b) => a.start - b.start);
+  const cursorInput = moves.length ? 1 + (tl.voice || []).length + (tl.music ? 1 : 0) : -1;
+  const head = []; // chains that come before the main one (the cursor overlay)
+
+  if (zooms.length || moves.length) {
+    // Work on a 2x canvas: zoompan positions its window on whole pixels, which
+    // shows as jitter during slow moves unless there are spare pixels to land
+    // on — and the cursor stays sharp when zoomed in.
+    v.push('scale=3840:2160:flags=bicubic');
+  }
+  if (moves.length) {
+    // The cursor is drawn here, at the output frame rate, instead of being
+    // recorded with the page: its motion is then smooth regardless of how
+    // fast the browser delivered frames.
+    const win = tl.cursorWindow;
+    const enable = win ? `:enable='between(t,${at(win.startMs)},${at(win.endMs)})'` : '';
+    head.push(`[0:v]${v.join(',')}[page]`);
+    head.push(`[page][${cursorInput}:v]overlay=x='${cursorExpr(moves, 'x', 3840, CURSOR_HOTSPOT.x)}'` +
+      `:y='${cursorExpr(moves, 'y', 2160, CURSOR_HOTSPOT.y)}':eval=frame${enable}[pointed]`);
+    v.length = 0;
+  }
   if (zooms.length) {
     const keys = zoomKeys(zooms);
     const T = `(on/${FPS})`;
-    // Upscale first: zoompan positions its window on whole pixels, which shows
-    // as jitter during slow moves unless there are spare pixels to land on.
-    v.push('scale=iw*2:ih*2:flags=bicubic');
     v.push(`zoompan=z='1+${ZOOM}*(${keyExpr(keys, 'a', T)})'` +
       `:x='max(0,min(iw-iw/zoom,(${keyExpr(keys, 'x', T)})*iw-iw/zoom/2))'` +
       `:y='max(0,min(ih-ih/zoom,(${keyExpr(keys, 'y', T)})*ih-ih/zoom/2))'` +
       `:d=1:s=1920x1080:fps=${FPS}`);
+  } else if (moves.length) {
+    v.push('scale=1920:1080:flags=bicubic');
   }
 
   for (const c of tl.captions || []) {
@@ -197,7 +247,7 @@ function buildFilterGraph(tl) {
   }
   v.push('format=yuv420p');
 
-  const chains = [`[0:v]${v.join(',')}[v]`];
+  const chains = [...head, `[${moves.length ? 'pointed' : '0:v'}]${v.join(',')}[v]`];
   const durationSec = tl.videoDurationMs ? sec(remapTime(tl.videoDurationMs, cuts)) : (wall ? at(wall) : null);
 
   // Audio: every clip is delayed to its cue and padded to full length, so the
@@ -219,7 +269,7 @@ function buildFilterGraph(tl) {
       `atrim=0:${durationSec},${fade}[a]`);
   }
 
-  return { graph: chains.join(';'), hasAudio: Boolean(labels.length && durationSec), durationSec };
+  return { graph: chains.join(';'), hasAudio: Boolean(labels.length && durationSec), durationSec, cursorInput };
 }
 
 class DemoEditor {
@@ -279,18 +329,21 @@ class DemoEditor {
 
     // Try the full edit first; if FFmpeg rejects it, still deliver a captioned cut.
     const timing = { cuts: full.cuts, stills: full.stills, durationMs: full.durationMs, videoDurationMs: this.probeDurationMs(inputPath) };
+    const cursor = fs.existsSync(CURSOR_PNG) ? { cursor: full.cursor, cursorWindow: full.cursorWindow } : {};
     const attempts = [
-      { ...full, ...timing, music },
+      { ...full, ...timing, ...cursor, music },
+      { captions: full.captions, ...timing, ...cursor },
       { captions: full.captions, ...timing }
     ];
     for (const [i, tl] of attempts.entries()) {
-      const { graph, hasAudio, durationSec } = buildFilterGraph({ ...tl, music: Boolean(tl.music) });
+      const { graph, hasAudio, durationSec, cursorInput } = buildFilterGraph({ ...tl, music: Boolean(tl.music) });
       // Keep the edit decision list next to the raw footage for troubleshooting.
       fs.writeFileSync(path.join(path.dirname(inputPath), '..', '.video-tmp', 'timeline.json'),
         JSON.stringify({ timeline: tl, graph }, null, 2));
       const args = ['-y', '-i', inputPath];
       for (const clip of tl.voice || []) args.push('-i', clip.file);
       if (tl.music) args.push('-stream_loop', '-1', '-i', tl.music);
+      if (cursorInput > 0) args.push('-loop', '1', '-framerate', String(FPS), '-i', CURSOR_PNG);
       args.push('-filter_complex', graph, '-map', '[v]');
       if (hasAudio) args.push('-map', '[a]', '-c:a', 'aac', '-b:a', '160k');
       if (durationSec) args.push('-t', String(durationSec));
@@ -303,14 +356,14 @@ class DemoEditor {
       } catch (err) {
         const why = String(err.stderr || err.message).trim().split('\n').slice(-2).join(' | ');
         const last = i === attempts.length - 1;
-        if (logger) logger.error(`FFmpeg ${i === 0 ? 'full edit' : 'basic edit'} failed (${why}) — ${last ? 'keeping raw recording' : 'retrying without zoom/audio'}`);
+        if (logger) logger.error(`FFmpeg ${i === 0 ? 'full edit' : 'basic edit'} failed (${why}) — ${last ? 'keeping raw recording' : 'retrying with a simpler edit'}`);
       }
     }
     return null;
   }
 }
 
-module.exports = { DemoEditor, resolveFfmpeg, buildFilterGraph, normalizeCuts, remapTime, zoomKeys };
+module.exports = { DemoEditor, resolveFfmpeg, buildFilterGraph, normalizeCuts, remapTime, zoomKeys, cursorExpr };
 
 
 // Self-check: `node agent/demoEditor.js`
@@ -336,5 +389,12 @@ if (require.main === module) {
   // Recording ran 10% slow over its 8s of motion (2s were cut): t=4s is 2s into the motion → +0.2s.
   const w = buildFilterGraph({ voice: [{ tMs: 4000 }], cuts: [{ startMs: 1000, endMs: 3000 }], durationMs: 10000, videoDurationMs: 10800 });
   assert.ok(w.graph.includes('adelay=2800|2800') && w.durationSec === 9.4, w.graph);
+  // Cursor: rests at `from`, follows the arc, rests at `to`; drawn from its own input after the audio inputs.
+  const move = { start: 1, dur: 0.5, from: { x: 0.5, y: 0.5 }, control: { x: 0.6, y: 0.4 }, to: { x: 0.75, y: 0.5 } };
+  assert.ok(cursorExpr([move], 'x', 3840, 21).startsWith('if(lt(t,1),1899,if(lt(t,1.5),'));
+  assert.ok(cursorExpr([move], 'x', 3840, 21).endsWith(',2859))'));
+  const c = buildFilterGraph({ cursor: [{ tMs: 1000, durationMs: 500, ...move }], voice: [{ tMs: 0 }], durationMs: 5000 });
+  assert.ok(c.cursorInput === 2 && c.graph.includes('[page][2:v]overlay=') && c.graph.includes('[pointed]scale=1920:1080'), c.graph);
+  assert.strictEqual(buildFilterGraph({ captions: [] }).cursorInput, -1);
   console.log('demoEditor self-check passed');
 }

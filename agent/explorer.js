@@ -64,7 +64,8 @@ function parseKeyboardActions(guide) {
  * @param {number} [options.videoT0] - epoch ms when the recording started (timeline origin)
  * @param {import('../utils/logger').Logger} logger
  * @param {import('./screenshotter').Screenshotter} screenshotter
- * @returns {Promise<{steps: Array, summary: string, pages: Array, cuts: Array<{startMs: number, endMs: number}>}>}
+ * @param {boolean} [options.cursorInPage=false] - the cursor is animated in the page (no editor available)
+ * @returns {Promise<{steps: Array, summary: string, pages: Array, cuts: Array<{startMs: number, endMs: number}>, cursor: Array}>}
  */
 async function explore(page, options, logger, screenshotter) {
   const maxSteps = options.maxSteps || 15;
@@ -82,6 +83,11 @@ async function explore(page, options, logger, screenshotter) {
   const unclicked = (els) => options.decide ? els : els.filter(el => !tracker.hasClicked(tracker.elementKey(el)));
   const t0 = options.videoT0 || Date.now();
   const now = () => Date.now() - t0;
+  // Cursor path for the editor to draw (unless the cursor is animated in the page itself).
+  const vp = page.viewportSize() || { width: 1280, height: 720 };
+  const track = present && !options.cursorInPage
+    ? { pos: { x: vp.width * 0.5, y: vp.height * 0.6 }, moves: [], now }
+    : null;
 
   // Dead time (thinking / waiting) to cut from the video.
   const cuts = [];
@@ -226,7 +232,7 @@ async function explore(page, options, logger, screenshotter) {
         closeCut();
         const tStart = now();
         const prevUrl = page.url();
-        const point = present ? await pointAt(page, await locate(page, chosen)) : null;
+        const point = present ? await pointAt(page, await locate(page, chosen), track) : null;
         const actionDesc = await executeAction(page, chosen, {
           value: isRecommended ? analysis.inputValue : '',
           typeDelay: present ? 45 : 0,
@@ -297,7 +303,7 @@ async function explore(page, options, logger, screenshotter) {
   closeCut(); // the final look-around that found nothing more to do
 
   const summary = history.length ? history.join(' → ') : 'No actions taken';
-  return { steps, summary, pages, cuts };
+  return { steps, summary, pages, cuts, cursor: track ? track.moves : [] };
 }
 
 /** Build a rich step record for narration/video. */

@@ -127,7 +127,7 @@ async function runSight(options = {}) {
       browser = await chromium.launch({ headless: opts.headless, args: present ? Recorder.LAUNCH_ARGS : [] });
       if (present) {
         context = await recorder.createContext(browser);
-        await installCursor(context);
+        await installCursor(context, { arrow: !recorder.ffmpeg }); // with FFmpeg the editor draws the cursor
       } else {
         context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
       }
@@ -149,14 +149,16 @@ async function runSight(options = {}) {
 
       const screenshotter = new Screenshotter(outputDir, present ? recorder : null);
       logger.info('Starting exploration...');
-      const exploreOpts = { ...opts, guide, present, videoT0 };
+      const exploreOpts = { ...opts, guide, present, videoT0, cursorInPage: !recorder.ffmpeg };
+      const cursorStart = Date.now() - videoT0;
       const result = await explore(page, exploreOpts, logger, screenshotter);
 
       // Stop recording to get the raw video path.
       let rawVideoPath = null;
       let durationMs = 0;
+      let outroStart = 0;
       if (present) {
-        const outroStart = Date.now() - videoT0;
+        outroStart = Date.now() - videoT0;
         await showCard(page, { title: about.title, subtitle: 'That\u2019s the tour.', footer: 'Recorded automatically with RunSight' }, 2600);
         durationMs = Date.now() - videoT0;
         stills.push({ startMs: outroStart + 800, endMs: durationMs });
@@ -188,7 +190,8 @@ async function runSight(options = {}) {
           logger.info('Editing demo video (cuts, zoom, captions)...');
           const edited = await editor.edit(rawVideoPath, {
             captions: narrative.captions, zooms: narrative.zooms, cuts: result.cuts,
-            voice, music: opts.music, durationMs, stills
+            voice, music: opts.music, durationMs, stills,
+            cursor: result.cursor, cursorWindow: { startMs: cursorStart, endMs: outroStart }
           }, logger);
           if (edited) videoPath = edited;
         }

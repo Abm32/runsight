@@ -15,7 +15,7 @@
  * real mouse events, and a ripple on mousedown. Built with DOM APIs only (no
  * innerHTML / <style>) so strict CSP and Trusted Types pages still work.
  */
-function cursorInit() {
+function cursorInit(showArrow) {
   if (window.top !== window || window.__rsCursor) return;
   window.__rsCursor = true;
 
@@ -49,7 +49,8 @@ function cursorInit() {
 
     const place = () => { cursor.style.transform = `translate(${x - 3}px, ${y - 2}px)`; };
     place();
-    document.documentElement.appendChild(cursor);
+    // When the editor draws the cursor, the page only contributes the click ripple.
+    if (showArrow) document.documentElement.appendChild(cursor);
     // Enable the glide only after the first paint, so the initial placement is instant.
     requestAnimationFrame(() => { cursor.style.transition = 'transform .55s cubic-bezier(.22,.8,.3,1)'; });
 
@@ -85,10 +86,21 @@ function cursorInit() {
 /**
  * Make the mouse pointer visible in every page of a browser context.
  * @param {import('playwright').BrowserContext} context
+ * @param {{arrow?: boolean}} [opts] - arrow=false draws only click ripples (the editor renders the cursor)
  * @returns {Promise<void>}
  */
-async function installCursor(context) {
-  await context.addInitScript(cursorInit);
+async function installCursor(context, opts = {}) {
+  await context.addInitScript(cursorInit, opts.arrow !== false);
+}
+
+/**
+ * How long the cursor takes to travel a distance: short hops are quick, long
+ * trips take longer, like a hand on a mouse.
+ * @param {number} distance - CSS px
+ * @returns {number} milliseconds
+ */
+function glideMs(distance) {
+  return Math.round(Math.min(1000, Math.max(350, 250 + distance * 0.55)));
 }
 
 /**
@@ -97,9 +109,11 @@ async function installCursor(context) {
  * failures are reported as `null` rather than thrown.
  * @param {import('playwright').Page} page
  * @param {import('playwright').Locator} locator
+ * @param {{pos: {x: number, y: number}, moves: Array, now: () => number}|null} [track] - when given,
+ *   the move is logged for the editor to draw (as viewport fractions) instead of animated in the page
  * @returns {Promise<{x: number, y: number}|null>} viewport point the cursor landed on
  */
-async function pointAt(page, locator) {
+async function pointAt(page, locator, track = null) {
   try {
     const scrolled = await locator.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -112,6 +126,21 @@ async function pointAt(page, locator) {
     const box = await locator.boundingBox({ timeout: 3000 });
     if (!box) return null;
     const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const vp = page.viewportSize();
+    if (track && vp) {
+      const from = track.pos;
+      const distance = Math.hypot(point.x - from.x, point.y - from.y);
+      const durationMs = glideMs(distance);
+      // Slight upward arc instead of a ruler-straight line.
+      const control = { x: (from.x + point.x) / 2, y: (from.y + point.y) / 2 - Math.min(distance * 0.15, 60) };
+      const frac = (p) => ({ x: p.x / vp.width, y: p.y / vp.height });
+      track.moves.push({ tMs: track.now(), durationMs, from: frac(from), control: frac(control), to: frac(point) });
+      track.pos = point;
+      await page.waitForTimeout(durationMs);
+      await page.mouse.move(point.x, point.y); // hover state appears as the cursor lands
+      await page.waitForTimeout(120);
+      return point;
+    }
     await page.mouse.move(point.x, point.y);
     await page.waitForTimeout(650); // let the cursor finish its glide before acting
     return point;
@@ -162,4 +191,4 @@ function holdMs(text) {
   return Math.max(1500, Math.round((words / 2.4) * 1000) + 500);
 }
 
-module.exports = { installCursor, pointAt, showCard, holdMs };
+module.exports = { installCursor, pointAt, showCard, holdMs, glideMs };
