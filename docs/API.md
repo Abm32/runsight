@@ -96,11 +96,11 @@ Runs the 3-tier exploration loop on a Playwright page.
 ### `executeAction(page, element, opts)` — `strategies/heuristicStrategy.js`
 Performs an action. `opts.value` overrides the demo-persona value, `opts.typeDelay` types key by key, `opts.guide` supplies `## Demo data`.
 
-### `installCursor(context)`, `pointAt(page, locator)`, `showCard(page, card, ms)` — `agent/director.js`
+### `installCursor(context, opts)`, `pointAt(page, locator, track)`, `showCard(page, card, ms)`, `glideMs(distance)` — `agent/director.js`
 On-camera presentation helpers: visible cursor, glide to a target, title cards.
 
 ### `DemoEditor#edit(inputPath, timeline, logger)` — `agent/demoEditor.js`
-Edits the raw recording. `timeline`: `{ captions, zooms, cuts, stills, voice, music, durationMs }` (a bare captions array is still accepted).
+Edits the raw recording. `timeline`: `{ captions, zooms, cuts, stills, voice, music, durationMs, cursor, cursorWindow }` (a bare captions array is still accepted).
 
 ### `findInteractableElements(page)` — `strategies/heuristicStrategy.js`
 Discovers all visible, enabled, interactable DOM elements.

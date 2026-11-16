@@ -5,6 +5,14 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - Unreleased
+
+### Changed
+- **Smooth cursor** — the cursor is no longer recorded with the page (capped at 25 fps). The explorer logs each cursor move and the editor draws the arrow at 50 fps, so motion is smooth regardless of how fast the browser delivers frames. `demo.mp4` is now 50 fps
+- **More natural cursor motion** — moves follow a slight arc with smoothstep easing and take 0.35–1 s depending on distance, instead of a fixed-speed straight line. Motion recipe adapted from [farzaa/clicky](https://github.com/farzaa/clicky) (MIT)
+- The hover state of a target now appears when the cursor arrives, not before
+- Without FFmpeg the previous in-page cursor is still used
+
 ## [1.3.1] - 2026-11-15
 
 ### Fixed

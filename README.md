@@ -231,7 +231,7 @@ outputs/
     ...
   videos/
     session.mkv      (raw recording, real-time)
-    demo.mp4         (edited 1080p demo: cuts, zoom, captions, voice-over — if FFmpeg available)
+    demo.mp4         (edited 1080p 50 fps demo: cuts, zoom, captions, voice-over — if FFmpeg available)
   flow.md            (human-readable walkthrough)
   logs.txt           (human-readable)
   report.json        (machine-readable)
