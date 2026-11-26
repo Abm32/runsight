@@ -1,17 +1,33 @@
 {
   "name": "runsight",
   "version": "1.3.2",
-  "description": "Your project demos itself. One command — your app is explored, recorded, and ready to share.",
+  "description": "Your project demos itself. One command runs your web app, explores it in a browser and produces an edited demo video. Free heuristic mode, or directed by your AI agent (MCP) or any model.",
   "main": "index.js",
   "bin": {
     "runsight": "cli.js"
   },
+  "files": [
+    "agent",
+    "strategies",
+    "utils",
+    "config",
+    "scripts",
+    "skills",
+    "docs/*.md",
+    "index.js",
+    "cli.js",
+    "mcp.js"
+  ],
   "scripts": {
     "start": "node cli.js",
     "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "demo",
+    "demo-video",
+    "product-demo",
+    "screen-recording",
+    "mcp",
     "agent",
     "automation",
     "playwright",
