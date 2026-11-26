@@ -5,6 +5,16 @@ All notable changes to RunSight will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-11-26
+
+### Changed
+- **README shows a real demo** — a video RunSight recorded of a sample app in heuristic mode sits at the top, with the exact command that made it
+- **Free modes up front** — heuristic (no API key), agent-directed (MCP) and own-model runs are listed before anything that needs a paid key
+- **Honest status** — hosted demo links and CI generation are marked "planned, not built" in the README and roadmap; the sample console output and timings are from a real run (about a minute with video, not 8 seconds)
+- Added a comparison with screen recorders, Playwright scripts and browser agents, and a note separating this package from the unrelated `runsight` on PyPI
+- Roadmap brought up to date: v1.3.x section added, MCP server moved from v3.0.0 to done
+- Smaller npm package: only runtime files and docs are published (`files` in `package.json`)
+
 ## [1.3.2] - 2026-11-16
 
 ### Changed
