@@ -5,55 +5,74 @@
 [![npm version](https://img.shields.io/npm/v/runsight.svg)](https://www.npmjs.com/package/runsight)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The fastest path from code to proof. One command — your app is explored, recorded, and ready to share.
+One command runs your web app, explores it in a real browser, and hands you an edited demo video — cursor, zoom, captions — plus screenshots and a report.
 
 ```bash
 npx runsight ./my-project
 ```
 
-RunSight runs your project, launches a browser, navigates the UI autonomously using AI vision, captures screenshots at every step, records a session video, and outputs a structured report. No config. No test scripts. No manual clicking.
+![RunSight exploring a sample app and producing an edited demo video](docs/demo.gif)
 
-**Stop explaining your app. Let it show itself.**
+*Made by RunSight itself: `npx runsight ./tasklane --mode=heuristic` on a small sample app. No API key, no script, no manual editing — about a minute from command to this 34-second video ([full-quality MP4](https://github.com/Abm32/runsight/releases/download/v1.3.2/demo.mp4)).*
 
-## Vision
+**Works free, no API key.** Three ways to run it:
 
-RunSight is evolving from a browser automation tool into the **default way to generate demos for software**.
+| | Cost | How |
+|---|---|---|
+| **Heuristic mode** | Free, offline | `npx runsight ./my-project --mode=heuristic` |
+| **Your AI agent directs it** (Claude Code, Cursor, Codex — MCP) | No extra key: uses the agent you already have | `claude mcp add runsight -- npx -y runsight mcp` |
+| **Your own model** (Ollama, LM Studio, OpenRouter, or an OpenAI / Anthropic key) | Whatever your model costs | `--base-url=… --model=…` |
 
-Today: one command turns any repo into screenshots, video, and a structured report.
+Heuristic mode follows navigation and forms by rule; an agent or a vision model understands the app and tells a better story.
 
-Tomorrow: one command turns any repo into a **shareable demo link** — ready for portfolios, recruiters, investors, Product Hunt, or teammates.
+## How It's Different
 
-The goal: **every `git push` auto-generates a living demo of your project.**
+| Instead of… | You would… | With RunSight |
+|---|---|---|
+| A screen recorder (Loom, OBS) | Click through the app yourself, then edit the recording | Nobody clicks; the video comes out already cut, zoomed and captioned |
+| A Playwright script with `recordVideo` | Write and maintain a script per app, and get a raw, unedited recording | No script — it finds the pages, forms and buttons itself |
+| A browser agent (browser-use and similar) | Give an LLM a task and get the task done — not a video | The output *is* the deliverable: `demo.mp4`, a written walkthrough, screenshots and `report.json`. An LLM is optional |
+
+RunSight is built on Playwright; it is the part that decides what to show and turns the session into something you can share.
 
 ## What It Does
 
 | You used to... | Now you... |
 |----------------|------------|
 | Manually click through your app after every change | Run one command |
-| Record your screen to show someone your project | Get an auto-generated video |
-| Write a paragraph explaining what your app does | Send a report.json |
-| Spend 20 min making a demo for a job application | Wait 8 seconds |
+| Record your screen to show someone your project | Get an auto-generated, edited video |
+| Write a paragraph explaining what your app does | Send `flow.md` or `report.json` |
+| Spend an evening making a demo for a launch or job application | Wait about a minute |
 
 ## How It Works
 
 ```
-npx runsight ./my-project
+$ npx runsight ./tasklane --mode=heuristic
 
-🔍 Detecting project type...
-✅ Found: Node.js (Next.js)
-📦 Installing dependencies...
-🚀 Server started on :3000
-🌐 Browser launched
-🤖 Exploring UI (15 steps)...
-📸 15 screenshots captured
-🎬 demo.mp4 recorded
-📊 report.json written
-✅ Done in 8.1s
+🔍 RunSight v1.3.3
+  ℹ️  Found: tasklane (static)
+  ℹ️  tasklane ready at http://localhost:3000
+  ℹ️  Starting exploration...
+  [step-1] Clicked a "Tasks" → navigated to /tasks
+  [step-2] Clicked a "Pricing" → navigated to /pricing
+  [step-3] Clicked a "Sign up" → navigated to /signup
+  [step-4] Filled text input "name" with "Alex Morgan"
+  ...
+  [step-7] Clicked button "Create account"
+  ℹ️  Editing demo video (cuts, zoom, captions)...
+
+  ✅ Your demo is ready
+  🎬 Video       outputs/videos/demo.mp4
+  📝 Walkthrough outputs/flow.md
+  📸 Screenshots 7 captured
+  📊 Report      outputs/report.json
 ```
+
+(Output trimmed. This run took 56 seconds; with `--no-video` it takes under 10.)
 
 1. **Detect** — identifies your project type and framework automatically, and auto-generates a lightweight understanding of your app (description, pages/routes) from `package.json` and file structure
 2. **Run** — installs dependencies, starts the dev server, detects the port
-3. **Explore** — AI navigates your UI using a 3-tier strategy (heuristic → priority → LLM vision), informed by that project understanding
+3. **Explore** — navigates your UI on its own: rule-based ranking in heuristic mode, or a vision model / your AI agent reading each page, informed by that project understanding
 4. **Capture** — screenshots every step, records the session on camera: visible cursor, typed input, paced actions, intro and outro cards
 5. **Edit** — cuts the agent's thinking time, zooms in on each action, adds captions, optional voice-over and music
 6. **Report** — outputs machine-readable `report.json` + human-readable `logs.txt`, with `demo.mp4` and `flow.md` as the shareable highlights
@@ -241,7 +260,7 @@ outputs/
 
 ```json
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "projectPath": "/path/to/project",
   "startTime": "2026-04-29T06:50:14.957Z",
   "endTime": "2026-04-29T06:50:23.042Z",
@@ -318,23 +337,24 @@ See [docs/GUIDE_TEMPLATE.md](docs/GUIDE_TEMPLATE.md) for the full prompt and exa
 
 RunSight is not a testing tool. It's the fastest path from code to proof.
 
-| Phase | What changes |
+| Status | What |
 |-------|-------------|
-| **Now (v1.3.2)** | Any model or your AI agent (MCP) → directed, auto-edited demo video (cursor, zoom, cuts, captions, voice-over), flow summary, screenshots, report |
-| **Soon (v2.0.0)** | `runsight.dev/demo/abc123` — shareable demo links |
-| **Future (v3.0.0)** | `git push` → demo auto-generated in CI |
+| **Works today (v1.3.3)** | Any model or your AI agent (MCP) → directed, auto-edited demo video (cursor, zoom, cuts, captions, voice-over), flow summary, screenshots, report — all written to local files |
+| **Planned, not built (v2.0.0)** | Shareable hosted demo links |
+| **Planned, not built (v3.0.0)** | `git push` → demo generated automatically in CI |
 
-See the full [Roadmap](docs/ROADMAP.md).
+Nothing in the planned rows exists yet; today you run the command yourself and share the files. The long-term goal is that every project has a living demo that updates itself. See the full [Roadmap](docs/ROADMAP.md).
 
 ## Requirements
 
 - Node.js 18+
 - Playwright (auto-installed with `npm install`)
 
-## Limitations (v1.3.2)
+## Limitations (v1.3.3)
 
 - Single-page apps with client-side routing may not be fully explored
-- LLM-guided mode requires API keys and incurs costs (use a cheap model like `gpt-4o-mini` to keep it low)
+- Heuristic mode is rule-based: it follows navigation and forms but can miss an app's core feature — direct it with an agent (MCP), a model, or a `.runsight` guide for a better story
+- Hosted OpenAI / Anthropic models need an API key and cost money (a cheap model like `gpt-4o-mini` keeps it low); heuristic, MCP and local-model runs do not
 - Demo video editing requires FFmpeg — bundled with install; falls back to a raw, unedited WebM recording if unavailable
 - Login needs credentials you provide (`## Demo data` in `.runsight`); sign-up forms are filled with a demo persona
 - Voice-over requires an OpenAI key; without one the demo has captions only. No music is bundled — pass your own with `--music`
@@ -348,6 +368,10 @@ See the full [Roadmap](docs/ROADMAP.md).
 - [Changelog](docs/CHANGELOG.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing](docs/CONTRIBUTING.md)
+
+## Not To Be Confused With
+
+This is `runsight` on **npm** ([Abm32/runsight](https://github.com/Abm32/runsight)) — the demo video generator. The Python package of the same name on PyPI (`runsight-ai/runsight`, a YAML workflow engine for AI agents) is a separate, unrelated project.
 
 ## License
 
