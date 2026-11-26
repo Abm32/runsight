@@ -1,6 +1,6 @@
 {
   "name": "runsight",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Your project demos itself. One command runs your web app, explores it in a browser and produces an edited demo video. Free heuristic mode, or directed by your AI agent (MCP) or any model.",
   "main": "index.js",
   "bin": {
