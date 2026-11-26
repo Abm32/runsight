@@ -24,7 +24,7 @@
 - [x] Stable CLI and programmatic API
 - [x] Merged to main, tagged, published to npm
 
-## v1.1.0 — Guide-Aware Agent ✅ (Current)
+## v1.1.0 — Guide-Aware Agent ✅
 
 - [x] README.md-aware project detection
 - [x] `.runsight` guide file support
@@ -35,7 +35,7 @@
 - [x] Input filtering (skip range/hidden/color/file)
 - [x] CI/CD pipeline (GitHub Actions → npm auto-publish)
 
-## v1.2.0 — Demo Generator ✅ (Current)
+## v1.2.0 — Demo Generator ✅
 
 The shift from "recording tool" to "demo generator."
 
@@ -52,7 +52,16 @@ The shift from "recording tool" to "demo generator."
 - [ ] HTML report — visual report with embedded screenshots and video player (deferred)
 - [ ] Custom action scripts (user-defined exploration steps) (deferred)
 
-## v2.0.0 — Shareable Demo Links
+## v1.3.x — Any Model, Any Agent ✅ (Current)
+
+- [x] Any OpenAI-compatible endpoint via `--base-url` (Ollama, LM Studio, OpenRouter, Groq, vLLM…)
+- [x] MCP server (`runsight mcp`) — Claude Code, Cursor, Codex or any MCP client directs the demo with its own model
+- [x] `decide` callback in the programmatic API — bring your own brain
+- [x] Claude skill shipped with the package
+- [x] Real-time recorder — captions, zooms and cuts stay in sync on animated pages
+- [x] Smooth 50 fps cursor drawn in the edit
+
+## v2.0.0 — Shareable Demo Links (planned, not built)
 
 The shift from "local output" to "shareable proof."
 
@@ -69,14 +78,13 @@ The shift from "local output" to "shareable proof."
 - Product Hunt launch assets
 - PR review — "here's what this change looks like"
 
-## v3.0.0 — Workflow Integration
+## v3.0.0 — Workflow Integration (planned, not built)
 
 The shift from "tool you run" to "part of how software ships."
 
 - [ ] `git push` → demo auto-generated in CI (GitHub Actions, GitLab CI)
 - [ ] PR comment bot — auto-posts demo link on every pull request
 - [ ] Slack/Discord notifications with demo preview
-- [ ] MCP server integration for agent tooling
 - [ ] Plugin system for custom exploration strategies
 - [ ] Docker container for isolated execution
 - [ ] Parallel multi-page exploration
